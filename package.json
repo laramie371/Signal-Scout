@@ -1,6 +1,6 @@
 {
   "name": "signal-scout",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
@@ -40,6 +40,11 @@
     "appId": "com.signalscout.app",
     "productName": "Signal Scout",
     "artifactName": "${productName}-Setup-${version}.${ext}",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
     "directories": {
       "output": "release"
     },

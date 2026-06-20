@@ -1,19 +1,20 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import Parser from "rss-parser";
 import { release } from "node:os";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const distElectron = join(__dirname, "..");
-const dist = join(distElectron, "../dist");
+const appRoot = join(__dirname, "..");
+const rendererDist = join(appRoot, "dist");
 
-process.env.DIST_ELECTRON = distElectron;
-process.env.DIST = dist;
+process.env.DIST_ELECTRON = __dirname;
+process.env.DIST = rendererDist;
 process.env.VITE_PUBLIC = process.env.VITE_DEV_SERVER_URL
-  ? join(distElectron, "../public")
-  : dist;
+  ? join(appRoot, "public")
+  : rendererDist;
 
 if (release().startsWith("6.1")) app.disableHardwareAcceleration();
 if (process.platform === "win32") app.setAppUserModelId(app.getName());
@@ -21,6 +22,9 @@ if (process.platform === "win32") app.setAppUserModelId(app.getName());
 let win: BrowserWindow | null = null;
 
 function createWindow() {
+  const indexHtml = join(rendererDist, "index.html");
+  logPathDebug(indexHtml);
+
   win = new BrowserWindow({
     title: "Signal Scout",
     width: 1200,
@@ -37,13 +41,23 @@ function createWindow() {
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    win.loadFile(join(dist, "index.html"));
+    win.loadFile(indexHtml);
   }
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
   });
+}
+
+function logPathDebug(indexHtml: string) {
+  if (app.isPackaged && process.env.SIGNAL_SCOUT_DEBUG_PATHS !== "1") return;
+
+  console.log("[Signal Scout] app.isPackaged:", app.isPackaged);
+  console.log("[Signal Scout] __dirname:", __dirname);
+  console.log("[Signal Scout] process.resourcesPath:", process.resourcesPath);
+  console.log("[Signal Scout] resolved index.html:", indexHtml);
+  console.log("[Signal Scout] index.html exists:", existsSync(indexHtml));
 }
 
 app.whenReady().then(createWindow);
