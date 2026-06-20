@@ -1,0 +1,198 @@
+import { scoreItem, type ScoreResult } from "./scoring";
+import type { AiMatchReview, Opportunity, Project } from "../types/project";
+
+export interface FeedItem {
+  id: string;
+  title: string;
+  content: string;
+  feedTitle: string;
+  feedUrl: string;
+  author: string;
+  link: string;
+  pubDate: string;
+}
+
+export type ScanOptions = {
+  minimumOpportunityScore: number;
+  postsPerFeed: number;
+  maxFeedAgeDays: number;
+  openAiKey: string;
+  openAiModel: string;
+  enableAiMatchReview: boolean;
+  aiReviewThreshold: number;
+  maxAiReviewsPerScan: number;
+};
+
+export async function scanFeedsForProjects(projects: Project[], options: ScanOptions): Promise<Opportunity[]> {
+  if (!window.signalScout?.rssScan) {
+    throw new Error("RSS scanning requires the Electron app runtime.");
+  }
+
+  const seen = new Set<string>();
+  const opportunities: Opportunity[] = [];
+  let aiReviewsUsed = 0;
+
+  for (const project of projects) {
+    const feeds = buildFeeds(project);
+    if (feeds.length === 0) continue;
+
+    const result = await window.signalScout.rssScan({ feeds, limitPerFeed: options.postsPerFeed });
+    if (!result.ok) {
+      throw new Error(result.error || "RSS scan failed in Electron main process.");
+    }
+
+    for (const item of result.items || []) {
+      const key = `${project.id}:${item.id || item.link}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      if (!isWithinMaxAge(item.pubDate, options.maxFeedAgeDays)) continue;
+
+      const scored = scoreItem(item, project);
+      if (scored.score < options.minimumOpportunityScore || scored.matchedKeywords.length === 0) continue;
+
+      const aiReview = await maybeReviewMatchWithAi(item, project, scored, options, aiReviewsUsed);
+      if (aiReview) aiReviewsUsed += 1;
+      if (aiReview && !aiReview.isOpportunity && scored.score < 90) continue;
+
+      opportunities.push(buildOpportunity(item, project, scored, aiReview));
+    }
+  }
+
+  return opportunities
+    .sort((a, b) => b.score - a.score || new Date(b.foundAt).getTime() - new Date(a.foundAt).getTime())
+    .slice(0, 80);
+}
+
+function buildFeeds(project: Project): string[] {
+  return (project.feeds || [])
+    .map((feed) => feed.trim())
+    .filter(Boolean)
+    .filter((feed, index, all) => all.indexOf(feed) === index)
+    .slice(0, 12);
+}
+
+function buildOpportunity(
+  item: FeedItem,
+  project: Project,
+  scored: ScoreResult,
+  aiReview?: AiMatchReview,
+): Opportunity {
+  const matched = scored.matchedKeywords.slice(0, 5);
+  const sourceName = cleanFeedTitle(item.feedTitle, item.feedUrl);
+  const displayScore = aiReview?.isOpportunity ? aiReview.matchStrength : scored.score;
+
+  return {
+    id: `${project.id}-${item.id || hashString(item.link)}`,
+    projectId: project.id,
+    title: item.title,
+    source: "RSS",
+    subreddit: sourceName,
+    url: item.link,
+    score: displayScore,
+    matchedKeywords: matched,
+    avoidedKeywords: scored.avoidedKeywords,
+    summary: item.content
+      ? trimText(item.content, 280)
+      : "Open the source to review the full conversation before replying.",
+    status: "new",
+    foundAt: parseDate(item.pubDate),
+    intent: aiReview?.isOpportunity && aiReview.opportunityType !== "not_relevant" ? aiReview.opportunityType : scored.intent,
+    intentScore: scored.intentScore,
+    matchExplanation: scored.explanation,
+    aiReviewed: Boolean(aiReview),
+    aiMatchStrength: aiReview?.matchStrength,
+    aiRisk: aiReview?.risk,
+    aiReviewReason: aiReview?.reason,
+  };
+}
+
+async function maybeReviewMatchWithAi(
+  item: FeedItem,
+  project: Project,
+  scored: ScoreResult,
+  options: ScanOptions,
+  aiReviewsUsed: number,
+) {
+  if (!window.signalScout?.openAiReviewOpportunity) return undefined;
+  if (!options.openAiKey || !options.enableAiMatchReview) return undefined;
+  if (scored.score < options.aiReviewThreshold) return undefined;
+  if (aiReviewsUsed >= options.maxAiReviewsPerScan) return undefined;
+
+  // Cost-control: AI match review is opt-in and only runs after local scoring has already found
+  // a strong candidate. This avoids sending every RSS item to OpenAI during scans.
+  const result = await window.signalScout.openAiReviewOpportunity({
+    apiKey: options.openAiKey,
+    model: options.openAiModel,
+    project: {
+      name: project.name,
+      description: project.description,
+      keywords: project.keywords,
+      avoidKeywords: project.avoidKeywords,
+      responseStyle: project.responseStyle,
+    },
+    opportunity: {
+      title: item.title,
+      summary: trimText(item.content, 600),
+      source: item.feedTitle,
+      url: item.link,
+      matchedKeywords: scored.matchedKeywords,
+      score: scored.score,
+      intent: scored.intent,
+      matchExplanation: scored.explanation,
+    },
+  });
+
+  if (!result.ok) return undefined;
+  return result.review;
+}
+
+function cleanFeedTitle(title: string, feedUrl: string) {
+  const trimmed = title.trim();
+  if (trimmed) return trimmed.replace(/^new on /i, "").replace(/^reddit:\s*/i, "");
+
+  const redditMatch = feedUrl.match(/reddit\.com\/r\/([^/]+)/i);
+  if (redditMatch) return `r/${redditMatch[1]}`;
+
+  try {
+    return new URL(feedUrl).hostname;
+  } catch {
+    return "RSS feed";
+  }
+}
+
+function trimText(value: string, maxLength: number) {
+  const compact = stripHtml(value).replace(/\s+/g, " ").trim();
+  if (compact.length <= maxLength) return compact;
+  return `${compact.slice(0, maxLength - 1).trim()}…`;
+}
+
+function stripHtml(value: string) {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function isWithinMaxAge(pubDate: string, maxAgeDays: number) {
+  const time = new Date(pubDate).getTime();
+  if (!Number.isFinite(time)) return true;
+  return Date.now() - time <= 1000 * 60 * 60 * 24 * maxAgeDays;
+}
+
+function parseDate(pubDate: string) {
+  const time = new Date(pubDate).getTime();
+  return Number.isFinite(time) ? new Date(time).toISOString() : new Date().toISOString();
+}
+
+function hashString(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
