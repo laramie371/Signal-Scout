@@ -9,7 +9,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 )
 
-// Use contextBridge
-window.ipcRenderer.on('main-process-message', (_event, message) => {
+const handleMainProcessMessage = (message: unknown) => {
   console.log(message)
-})
+}
+
+if (window.electronAPI?.on) {
+  window.electronAPI.on('main-process-message', handleMainProcessMessage)
+} else {
+  console.error('Missing electronAPI.on', window.electronAPI)
+}

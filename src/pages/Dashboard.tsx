@@ -44,6 +44,7 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
         enableAiMatchReview: activeSettings.enableAiMatchReview,
         aiReviewThreshold: activeSettings.aiReviewThreshold,
         maxAiReviewsPerScan: activeSettings.maxAiReviewsPerScan,
+        keywordMatchMode: activeSettings.keywordMatchMode,
       });
       const existing = loadLeads();
       const map = new Map(existing.map((lead) => [lead.url, lead]));

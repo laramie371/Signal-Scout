@@ -4,7 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./pages/Dashboard";
 import { Projects } from "./pages/Projects";
 import { Settings } from "./pages/Settings";
-import { loadProjects, saveProjects } from "./lib/storage";
+import { loadLeads, loadProjects, saveLeads, saveProjects } from "./lib/storage";
 import type { AppPage, Project } from "./types/project";
 
 function App() {
@@ -25,6 +25,7 @@ function App() {
   };
 
   const deleteProject = (projectId: string) => {
+    saveLeads(loadLeads().filter((lead) => lead.projectId !== projectId));
     updateProjects(projects.filter((project) => project.id !== projectId));
   };
 

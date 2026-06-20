@@ -4,6 +4,7 @@ import type { AiMatchReview, Opportunity, Project } from "../types/project";
 export interface FeedItem {
   id: string;
   title: string;
+  description: string;
   content: string;
   feedTitle: string;
   feedUrl: string;
@@ -21,6 +22,7 @@ export type ScanOptions = {
   enableAiMatchReview: boolean;
   aiReviewThreshold: number;
   maxAiReviewsPerScan: number;
+  keywordMatchMode: "high_recall" | "exact_phrase";
 };
 
 export async function scanFeedsForProjects(projects: Project[], options: ScanOptions): Promise<Opportunity[]> {
@@ -36,11 +38,21 @@ export async function scanFeedsForProjects(projects: Project[], options: ScanOpt
     const feeds = buildFeeds(project);
     if (feeds.length === 0) continue;
 
-    const result = await window.signalScout.rssScan({ feeds, limitPerFeed: options.postsPerFeed });
+    const payload = { feeds, limitPerFeed: options.postsPerFeed };
+    console.log("[Signal Scout] scan payload", { projectId: project.id, projectName: project.name, ...payload });
+
+    const result = await window.signalScout.rssScan(payload);
+    console.log("[Signal Scout] raw results count", {
+      projectId: project.id,
+      count: result.items?.length || 0,
+      errors: result.errors || [],
+      error: result.error,
+    });
     if (!result.ok) {
       throw new Error(result.error || "RSS scan failed in Electron main process.");
     }
 
+    let filteredCount = 0;
     for (const item of result.items || []) {
       const key = `${project.id}:${item.id || item.link}`;
       if (seen.has(key)) continue;
@@ -48,7 +60,7 @@ export async function scanFeedsForProjects(projects: Project[], options: ScanOpt
 
       if (!isWithinMaxAge(item.pubDate, options.maxFeedAgeDays)) continue;
 
-      const scored = scoreItem(item, project);
+      const scored = scoreItem(item, project, { keywordMatchMode: options.keywordMatchMode });
       if (scored.score < options.minimumOpportunityScore || scored.matchedKeywords.length === 0) continue;
 
       const aiReview = await maybeReviewMatchWithAi(item, project, scored, options, aiReviewsUsed);
@@ -56,7 +68,10 @@ export async function scanFeedsForProjects(projects: Project[], options: ScanOpt
       if (aiReview && !aiReview.isOpportunity && scored.score < 90) continue;
 
       opportunities.push(buildOpportunity(item, project, scored, aiReview));
+      filteredCount += 1;
     }
+
+    console.log("[Signal Scout] filtered results count", { projectId: project.id, count: filteredCount });
   }
 
   return opportunities

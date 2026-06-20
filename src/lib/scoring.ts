@@ -1,7 +1,8 @@
-import type { LeadIntent, Project } from "../types/project";
+import type { KeywordMatchMode, LeadIntent, Project } from "../types/project";
 
 export type ScorableItem = {
   title: string;
+  description?: string;
   content: string;
   feedTitle: string;
 };
@@ -14,6 +15,10 @@ export type ScoreResult = {
   avoidedKeywords: string[];
   intent: LeadIntent;
   explanation: string[];
+};
+
+export type ScoreOptions = {
+  keywordMatchMode: KeywordMatchMode;
 };
 
 const POSITIVE_INTENT_PHRASES = [
@@ -53,12 +58,45 @@ const TOOL_PHRASES = ["any tool", "is there a tool", "what tool", "what should i
 const RECOMMENDATION_PHRASES = ["recommend", "recommendation", "looking for", "best way"];
 const BUYING_PHRASES = ["pricing", "paid", "buy", "purchase", "worth it", "alternative to"];
 const SUPPORT_PHRASES = ["how do i", "how can i", "need help", "can't figure out", "problem with", "trying to"];
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "to",
+  "for",
+  "and",
+  "or",
+  "is",
+  "are",
+  "of",
+  "with",
+  "my",
+  "your",
+  "our",
+  "on",
+  "in",
+  "at",
+  "from",
+  "by",
+  "how",
+]);
 
 // Signal Scout intentionally avoids sending every feed item to OpenAI. First we use cheap deterministic
 // scoring so scans stay fast, private, and inexpensive. Only posts that pass the configured AI review
 // threshold are optionally sent for deeper AI match review.
-export function scoreItem(item: ScorableItem, project: Project): ScoreResult {
+export function expandKeywords(keywords: string[]): string[] {
+  return [...new Set(
+    keywords
+      .flatMap((keyword) => keyword.toLowerCase().split(/\s+/))
+      .map((word) => word.trim())
+      .filter(Boolean)
+      .filter((word) => !STOP_WORDS.has(word)),
+  )];
+}
+
+export function scoreItem(item: ScorableItem, project: Project, options: ScoreOptions): ScoreResult {
   const title = item.title.toLowerCase();
+  const description = (item.description || "").toLowerCase();
   const body = item.content.toLowerCase();
   const feedTitle = item.feedTitle.toLowerCase();
   const matchedKeywords: string[] = [];
@@ -66,33 +104,79 @@ export function scoreItem(item: ScorableItem, project: Project): ScoreResult {
   const explanation: string[] = [];
   let keywordScore = 0;
 
+  if (options.keywordMatchMode === "high_recall") {
+    const expandedTerms = expandKeywords(project.keywords);
+    console.log("[Signal Scout] project terms", { projectId: project.id, terms: expandedTerms });
+
+    for (const term of expandedTerms) {
+      let matched = false;
+
+      if (containsWord(title, term)) {
+        keywordScore += 10;
+        matched = true;
+        explanation.push(`Term "${term}" matched in title (+10)`);
+      }
+
+      if (containsWord(body, term)) {
+        keywordScore += 3;
+        matched = true;
+        explanation.push(`Term "${term}" matched in content (+3)`);
+      }
+
+      if (containsWord(description, term)) {
+        keywordScore += 5;
+        matched = true;
+        explanation.push(`Term "${term}" matched in description (+5)`);
+      }
+
+      if (containsWord(feedTitle, term)) {
+        keywordScore += 5;
+        matched = true;
+        explanation.push(`Term "${term}" matched feed/source (+5)`);
+      }
+
+      if (matched) matchedKeywords.push(term);
+    }
+  }
+
   for (const keyword of project.keywords) {
     const normalized = keyword.toLowerCase().trim();
     if (!normalized) continue;
 
     const titleMatch = title.includes(normalized);
+    const descriptionMatch = description.includes(normalized);
     const bodyMatch = body.includes(normalized);
-    if (!titleMatch && !bodyMatch) continue;
-
-    matchedKeywords.push(keyword);
-    if (titleMatch) {
-      keywordScore += 30;
-      explanation.push(`Keyword "${keyword}" matched in title (+30)`);
-    }
-
-    if (bodyMatch) {
-      keywordScore += 10;
-      explanation.push(`Keyword "${keyword}" matched in body (+10)`);
-    }
+    const feedMatch = feedTitle.includes(normalized);
+    if (!titleMatch && !descriptionMatch && !bodyMatch && !feedMatch) continue;
 
     if (normalized.includes(" ")) {
-      keywordScore += 20;
-      explanation.push(`Multi-word phrase "${keyword}" matched (+20)`);
+      keywordScore += 25;
+      explanation.push(`Exact phrase "${keyword}" matched (+25)`);
     }
 
-    if (feedTitle.includes(normalized)) {
-      keywordScore += 5;
-      explanation.push(`Keyword "${keyword}" matched feed/source (+5)`);
+    if (options.keywordMatchMode === "exact_phrase") {
+      matchedKeywords.push(keyword);
+      if (titleMatch) {
+        keywordScore += 30;
+        explanation.push(`Keyword "${keyword}" matched in title (+30)`);
+      }
+
+      if (bodyMatch) {
+        keywordScore += 10;
+        explanation.push(`Keyword "${keyword}" matched in body (+10)`);
+      }
+
+      if (descriptionMatch) {
+        keywordScore += 5;
+        explanation.push(`Keyword "${keyword}" matched in description (+5)`);
+      }
+
+      if (feedMatch) {
+        keywordScore += 5;
+        explanation.push(`Keyword "${keyword}" matched feed/source (+5)`);
+      }
+    } else if (!matchedKeywords.includes(keyword) && (titleMatch || descriptionMatch || bodyMatch || feedMatch)) {
+      matchedKeywords.push(keyword);
     }
   }
 
@@ -108,16 +192,31 @@ export function scoreItem(item: ScorableItem, project: Project): ScoreResult {
 
   const intent = detectIntent(title, body);
   const score = Math.max(0, Math.min(100, keywordScore + intent.intentScore));
+  const uniqueMatchedKeywords = [...new Set(matchedKeywords)];
+
+  console.log("[Signal Scout] keyword match debug", {
+    post: item.title,
+    matched: uniqueMatchedKeywords,
+    score,
+  });
 
   return {
     score,
     keywordScore,
     intentScore: intent.intentScore,
-    matchedKeywords,
+    matchedKeywords: uniqueMatchedKeywords,
     avoidedKeywords,
     intent: intent.intent,
     explanation: [...explanation, ...intent.explanation],
   };
+}
+
+function containsWord(value: string, term: string) {
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(term)}([^a-z0-9]|$)`, "i").test(value);
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function detectIntent(title: string, body: string) {

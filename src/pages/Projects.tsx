@@ -36,6 +36,14 @@ export function Projects({ projects, onAddProject, onDeleteProject }: ProjectsPr
     setLeads(updated);
   };
 
+  const deleteProject = (projectId: string) => {
+    if (!window.confirm("Delete this project and all of its leads?")) return;
+    const updated = leads.filter((lead) => lead.projectId !== projectId);
+    saveLeads(updated);
+    setLeads(updated);
+    onDeleteProject(projectId);
+  };
+
   return (
     <main className="page-stack">
       <section className="section-heading">
@@ -79,7 +87,7 @@ export function Projects({ projects, onAddProject, onDeleteProject }: ProjectsPr
             <div className="button-row">
               <button className="ghost" type="button" onClick={() => resetDismissed(project.id)}>Reset Dismissed</button>
               <button className="ghost" type="button" onClick={() => resetAllStatuses(project.id)}>Reset All Statuses</button>
-              <button className="ghost danger" type="button" onClick={() => onDeleteProject(project.id)}>Delete</button>
+              <button className="ghost danger" type="button" onClick={() => deleteProject(project.id)}>Delete</button>
             </div>
           </article>
         ))}

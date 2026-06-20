@@ -124,6 +124,31 @@ export function Settings({ onRestoreProjects }: SettingsProps) {
           </div>
         </div>
 
+        <div>
+          <p className="eyebrow">Keyword matching</p>
+          <div className="button-row">
+            <label className="checkbox-label">
+              <input
+                type="radio"
+                name="keywordMatchMode"
+                checked={settings.keywordMatchMode === "high_recall"}
+                onChange={() => updateSetting("keywordMatchMode", "high_recall")}
+              />
+              High Recall Mode
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="radio"
+                name="keywordMatchMode"
+                checked={settings.keywordMatchMode === "exact_phrase"}
+                onChange={() => updateSetting("keywordMatchMode", "exact_phrase")}
+              />
+              Exact Phrase Mode
+            </label>
+          </div>
+          <small>High Recall Mode is recommended. It expands phrases into searchable terms, then lets scoring and optional AI review narrow the results.</small>
+        </div>
+
         <div className="two-column-grid">
           <label>
             Minimum Opportunity Score

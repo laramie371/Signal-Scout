@@ -57,7 +57,6 @@ export function ProjectForm({ onAdd }: ProjectFormProps) {
       }
 
       setKeywords(formatListForTextarea(result.suggestion.keywords));
-      setAvoidKeywords(formatListForTextarea(result.suggestion.avoidKeywords));
       setFeeds(formatListForTextarea(result.suggestion.feeds));
       setResponseStyle(result.suggestion.responseStyle);
       setAiMessage(result.suggestion.reasoning || "Project setup generated. Review and edit before saving.");

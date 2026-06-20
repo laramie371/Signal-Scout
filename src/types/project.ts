@@ -22,6 +22,7 @@ export type LeadIntent =
   | "not_clear";
 
 export type AiRisk = "low" | "medium" | "high";
+export type KeywordMatchMode = "high_recall" | "exact_phrase";
 
 export interface AiResponse {
   shouldReply: boolean;
@@ -71,6 +72,7 @@ export interface AppSettings {
   enableAiMatchReview: boolean;
   aiReviewThreshold: number;
   maxAiReviewsPerScan: number;
+  keywordMatchMode: KeywordMatchMode;
 }
 
 export interface ProjectSetupSuggestion {

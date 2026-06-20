@@ -377,7 +377,8 @@ textarea {
   outline: none;
 }
 
-input[type="checkbox"] {
+input[type="checkbox"],
+input[type="radio"] {
   width: auto;
   padding: 0;
 }

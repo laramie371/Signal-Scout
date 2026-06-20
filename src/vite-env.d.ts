@@ -7,6 +7,17 @@ export {};
 
 declare global {
   interface Window {
+    electronAPI?: {
+      scan: (payload: unknown) => Promise<unknown>;
+      rssScan: (args: { feeds: string[]; limitPerFeed?: number }) => Promise<{
+        ok: boolean;
+        items?: FeedItem[];
+        errors?: string[];
+        error?: string;
+      }>;
+      on: (channel: string, callback: (data: unknown) => void) => void;
+      off: (channel: string, callback: (data: unknown) => void) => void;
+    };
     signalScout?: {
       rssScan: (args: { feeds: string[]; limitPerFeed?: number }) => Promise<{
         ok: boolean;
@@ -80,6 +91,8 @@ declare global {
         error?: string;
       }>;
       openExternal: (url: string) => Promise<void>;
+      on: (channel: string, callback: (data: unknown) => void) => void;
+      off: (channel: string, callback: (data: unknown) => void) => void;
     };
   }
 }

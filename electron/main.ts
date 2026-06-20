@@ -78,6 +78,7 @@ ipcMain.handle("shell:openExternal", async (_event, url: string) => {
 type NormalizedFeedItem = {
   id: string;
   title: string;
+  description: string;
   content: string;
   feedTitle: string;
   feedUrl: string;
@@ -99,8 +100,10 @@ ipcMain.handle("rss:scan", async (_event, args: { feeds?: string[]; limitPerFeed
     const feeds = Array.isArray(args.feeds)
       ? args.feeds.map((feed) => String(feed || "").trim()).filter(Boolean).slice(0, 12)
       : [];
+    console.log("[Signal Scout] rss:scan payload", { feeds, limitPerFeed: args.limitPerFeed });
 
     if (feeds.length === 0) {
+      console.error("[Signal Scout] rss:scan error", "No RSS feeds configured for this project.");
       return { ok: false, error: "No RSS feeds configured for this project." };
     }
 
@@ -122,7 +125,8 @@ ipcMain.handle("rss:scan", async (_event, args: { feeds?: string[]; limitPerFeed
           items.push({
             id: String(item.guid || link),
             title: String(item.title || "Untitled feed item"),
-            content: String(item.contentSnippet || item.summary || item.content || ""),
+            description: String(item.contentSnippet || item.summary || ""),
+            content: String(item.content || item.summary || item.contentSnippet || ""),
             feedTitle,
             feedUrl,
             author: String(item.creator || item.author || "unknown"),
@@ -133,12 +137,15 @@ ipcMain.handle("rss:scan", async (_event, args: { feeds?: string[]; limitPerFeed
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown feed error";
         errors.push(`${shortFeedName(feedUrl)}: ${message}`);
+        console.error("[Signal Scout] rss:scan feed error", { feedUrl, message });
       }
     }
 
     const deduped = dedupeItems(items);
+    console.log("[Signal Scout] rss:scan raw results count", { count: deduped.length, errors });
     return { ok: true, items: deduped, errors };
   } catch (error) {
+    console.error("[Signal Scout] rss:scan handler error", error);
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Unknown RSS scan failure.",
@@ -168,7 +175,7 @@ ipcMain.handle("openai:suggestProject", async (_event, args: {
   websiteUrl?: string;
 }) => {
   try {
-    const prompt = `Create a Signal Scout project setup for monitoring RSS/community feeds.\n\nProject name: ${args.name || "Untitled"}\nDescription: ${args.description || ""}\nTarget audience: ${args.targetAudience || ""}\nWebsite/product URL: ${args.websiteUrl || ""}\n\nReturn strict JSON with these keys:\n- keywords: 12 to 24 focused search/match keywords, lowercase. Include exact problem phrases users might say.\n- avoidKeywords: 8 to 16 terms that usually mean low intent, irrelevant posts, jobs, homework, spam, or bad fits.\n- feeds: 5 to 10 RSS feed URLs. Prefer Reddit /new.rss feeds when relevant, e.g. https://www.reddit.com/r/webdev/new.rss. Use real likely subreddit names only.\n- responseStyle: one short sentence describing how replies should sound.\n- reasoning: 2 short sentences explaining the choices.\n\nDo not include markdown.`;
+    const prompt = `Create a Signal Scout project setup for monitoring RSS/community feeds.\n\nProject name: ${args.name || "Untitled"}\nDescription: ${args.description || ""}\nTarget audience: ${args.targetAudience || ""}\nWebsite/product URL: ${args.websiteUrl || ""}\n\nReturn strict JSON with these keys:\n- keywords: 12 to 24 focused search/match keywords, lowercase. Include exact problem phrases users might say.\n- feeds: 5 to 10 RSS feed URLs. Prefer Reddit /new.rss feeds when relevant, e.g. https://www.reddit.com/r/webdev/new.rss. Use real likely subreddit names only.\n- responseStyle: one short sentence describing how replies should sound.\n- reasoning: 2 short sentences explaining the choices.\n\nDo not suggest avoidKeywords. Leave avoid words blank for the user to add manually. Do not include markdown.`;
 
     const suggestion = await callOpenAiJson(args.apiKey, args.model, [
       {
@@ -182,7 +189,7 @@ ipcMain.handle("openai:suggestProject", async (_event, args: {
       ok: true,
       suggestion: {
         keywords: sanitizeStringArray(suggestion.keywords).slice(0, 30),
-        avoidKeywords: sanitizeStringArray(suggestion.avoidKeywords).slice(0, 24),
+        avoidKeywords: [],
         feeds: sanitizeStringArray(suggestion.feeds).filter((feed) => /^https?:\/\//i.test(feed)).slice(0, 12),
         responseStyle: typeof suggestion.responseStyle === "string" && suggestion.responseStyle.trim()
           ? suggestion.responseStyle.trim()
