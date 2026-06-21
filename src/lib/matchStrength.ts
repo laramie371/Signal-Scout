@@ -14,7 +14,7 @@ export function normalizeMatchStrength(value: unknown, score?: number): MatchStr
 }
 
 export function getOpportunityMatchStrength(opportunity: Opportunity): MatchStrength {
-  return opportunity.matchStrength || normalizeMatchStrength(opportunity.aiMatchStrength, opportunity.score);
+  return strengthFromScore(opportunity.score);
 }
 
 export function strengthFromScore(score: number): MatchStrength {

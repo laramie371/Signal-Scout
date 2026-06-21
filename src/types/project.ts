@@ -60,6 +60,8 @@ export interface Opportunity {
   actionSignalStrength?: MatchStrength;
   aiRisk?: AiRisk;
   aiReviewReason?: string;
+  aiReviewFailed?: boolean;
+  aiReviewError?: string;
   isRead?: boolean;
   selected?: boolean;
 }

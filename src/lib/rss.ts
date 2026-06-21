@@ -24,6 +24,26 @@ export type ScanOptions = {
   maxAiReviewsPerScan: number;
   aiReviewMode: "top_n" | "all";
   keywordMatchMode: "high_recall" | "exact_phrase";
+  onAiReviewProgress?: (progress: AiReviewProgress) => void;
+};
+
+export type AiReviewProgress = {
+  totalReviewTargets: number;
+  reviewedCount: number;
+  failedCount: number;
+  remainingCount: number;
+  reviewedOpportunities?: Opportunity[];
+};
+
+const AI_REVIEW_BATCH_SIZE = 5;
+
+type ReviewCandidate = {
+  item: FeedItem;
+  project: Project;
+  scored: ScoreResult;
+  aiReview?: AiMatchReview;
+  aiReviewFailed?: boolean;
+  aiReviewError?: string;
 };
 
 export async function scanFeedsForProjects(projects: Project[], options: ScanOptions): Promise<Opportunity[]> {
@@ -32,8 +52,7 @@ export async function scanFeedsForProjects(projects: Project[], options: ScanOpt
   }
 
   const seen = new Set<string>();
-  const opportunities: Opportunity[] = [];
-  let aiReviewsUsed = 0;
+  const candidates: ReviewCandidate[] = [];
 
   for (const project of projects) {
     const feeds = buildFeeds(project);
@@ -65,18 +84,17 @@ export async function scanFeedsForProjects(projects: Project[], options: ScanOpt
       if (scored.matchedKeywords.length === 0) continue;
       if (scored.avoidedKeywords.length > 0) continue;
 
-      const aiReview = await maybeReviewMatchWithAi(item, project, scored, options, aiReviewsUsed);
-      if (aiReview) aiReviewsUsed += 1;
-      if (aiReview && !aiReview.isOpportunity && scored.score < 90) continue;
-
-      opportunities.push(buildOpportunity(item, project, scored, aiReview));
+      candidates.push({ item, project, scored });
       filteredCount += 1;
     }
 
     console.log("[Signal Scout] filtered results count", { projectId: project.id, count: filteredCount });
   }
 
-  return opportunities
+  await reviewCandidatesWithAi(candidates, options);
+
+  return candidates
+    .map((candidate) => buildOpportunity(candidate))
     .sort((a, b) => b.score - a.score || new Date(b.foundAt).getTime() - new Date(a.foundAt).getTime())
     .slice(0, 1000);
 }
@@ -89,15 +107,10 @@ function buildFeeds(project: Project): string[] {
     .slice(0, 60);
 }
 
-function buildOpportunity(
-  item: FeedItem,
-  project: Project,
-  scored: ScoreResult,
-  aiReview?: AiMatchReview,
-): Opportunity {
+function buildOpportunity(candidate: ReviewCandidate): Opportunity {
+  const { item, project, scored, aiReview } = candidate;
   const matched = scored.matchedKeywords;
   const sourceName = cleanFeedTitle(item.feedTitle, item.feedUrl);
-  const displayScore = aiReview?.isOpportunity ? aiReview.matchScore : scored.score;
 
   return {
     id: `${project.id}-${item.id || hashString(item.link)}`,
@@ -106,7 +119,7 @@ function buildOpportunity(
     source: "RSS",
     subreddit: sourceName,
     url: item.link,
-    score: displayScore,
+    score: scored.score,
     matchedKeywords: matched,
     avoidedKeywords: scored.avoidedKeywords,
     summary: item.content
@@ -123,52 +136,100 @@ function buildOpportunity(
     actionSignalStrength: aiReview?.actionSignalStrength,
     aiRisk: aiReview?.risk,
     aiReviewReason: aiReview?.reason,
+    aiReviewFailed: candidate.aiReviewFailed,
+    aiReviewError: candidate.aiReviewError,
   };
 }
 
-async function maybeReviewMatchWithAi(
-  item: FeedItem,
-  project: Project,
-  scored: ScoreResult,
-  options: ScanOptions,
-  aiReviewsUsed: number,
-) {
-  if (!window.signalScout?.openAiReviewOpportunity) return undefined;
-  if (!options.openAiKey || !options.enableAiMatchReview) return undefined;
-  if (scored.score < options.aiReviewThreshold) return undefined;
-  if (options.aiReviewMode !== "all" && aiReviewsUsed >= options.maxAiReviewsPerScan) return undefined;
+async function reviewCandidatesWithAi(candidates: ReviewCandidate[], options: ScanOptions) {
+  if (!window.signalScout?.openAiReviewOpportunity) return;
+  if (!options.openAiKey || !options.enableAiMatchReview) return;
 
-  // Cost-control: AI match review is opt-in and only runs after local scoring has already found
-  // a strong candidate. This avoids sending every RSS item to OpenAI during scans.
-  try {
-    const result = await window.signalScout.openAiReviewOpportunity({
-      apiKey: options.openAiKey,
-      model: options.openAiModel,
-      project: {
-        name: project.name,
-        description: project.description,
-        keywords: project.keywords,
-        avoidKeywords: project.avoidKeywords,
-        responseStyle: project.responseStyle,
-      },
-      opportunity: {
-        title: item.title,
-        summary: trimText(item.content, 600),
-        source: item.feedTitle,
-        url: item.link,
-        matchedKeywords: scored.matchedKeywords,
-        score: scored.score,
-        intent: scored.intent,
-        matchExplanation: scored.explanation,
-      },
+  const eligibleCandidates = candidates.filter((candidate) => candidate.scored.score >= options.aiReviewThreshold);
+  const reviewTargets = options.aiReviewMode === "all"
+    ? eligibleCandidates
+    : eligibleCandidates.slice(0, options.maxAiReviewsPerScan);
+  const progress: AiReviewProgress = {
+    totalReviewTargets: reviewTargets.length,
+    reviewedCount: 0,
+    failedCount: 0,
+    remainingCount: reviewTargets.length,
+  };
+
+  console.log("[Signal Scout] AI review targets", progress);
+  options.onAiReviewProgress?.(progress);
+
+  for (const batch of chunk(reviewTargets, AI_REVIEW_BATCH_SIZE)) {
+    const settled = await Promise.allSettled(batch.map((candidate) => reviewSingleCandidateWithAi(candidate, options)));
+
+    settled.forEach((result, index) => {
+      const candidate = batch[index];
+      if (result.status === "fulfilled" && result.value) {
+        candidate.aiReview = result.value;
+        candidate.aiReviewFailed = false;
+        candidate.aiReviewError = undefined;
+        progress.reviewedCount += 1;
+      } else {
+        candidate.aiReviewFailed = true;
+        candidate.aiReviewError = result.status === "rejected"
+          ? formatReviewError(result.reason)
+          : "AI review returned no result.";
+        progress.failedCount += 1;
+      }
     });
 
-    if (!result.ok) return undefined;
-    return result.review;
-  } catch (error) {
-    console.error("[Signal Scout] AI match review failed", error);
-    return undefined;
+    progress.remainingCount = Math.max(0, progress.totalReviewTargets - progress.reviewedCount - progress.failedCount);
+    console.log("[Signal Scout] AI review progress", progress);
+    options.onAiReviewProgress?.({
+      ...progress,
+      reviewedOpportunities: batch.map((candidate) => buildOpportunity(candidate)),
+    });
   }
+}
+
+async function reviewSingleCandidateWithAi(candidate: ReviewCandidate, options: ScanOptions) {
+  const { item, project, scored } = candidate;
+  // Cost-control: AI match review is opt-in and only runs after local scoring has already found
+  // a strong candidate. This avoids sending every RSS item to OpenAI during scans.
+  const result = await window.signalScout?.openAiReviewOpportunity({
+    apiKey: options.openAiKey,
+    model: options.openAiModel,
+    project: {
+      name: project.name,
+      description: project.description,
+      keywords: project.keywords,
+      avoidKeywords: project.avoidKeywords,
+      responseStyle: project.responseStyle,
+    },
+    opportunity: {
+      title: item.title,
+      summary: trimText(item.content, 600),
+      source: item.feedTitle,
+      url: item.link,
+      matchedKeywords: scored.matchedKeywords,
+      score: scored.score,
+      intent: scored.intent,
+      matchExplanation: scored.explanation,
+    },
+  });
+
+  if (!result?.ok || !result.review) {
+    throw new Error(result?.error || "AI review returned no result.");
+  }
+
+  return result.review;
+}
+
+function chunk<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function formatReviewError(error: unknown) {
+  return error instanceof Error ? error.message : "AI review failed.";
 }
 
 function cleanFeedTitle(title: string, feedUrl: string) {

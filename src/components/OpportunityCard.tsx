@@ -180,6 +180,9 @@ export function OpportunityCard({ opportunity, project, onStatusChange, onUpdate
           {opportunity.aiReviewReason && <p>AI review: {opportunity.aiReviewReason}</p>}
         </div>
       )}
+      {opportunity.aiReviewFailed && opportunity.aiReviewError && (
+        <div className="alert error-alert">AI review failed: {opportunity.aiReviewError}</div>
+      )}
       {responseError && <div className="alert error-alert">{responseError}</div>}
 
       {opportunity.aiResponse && (
