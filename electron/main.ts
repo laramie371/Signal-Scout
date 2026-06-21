@@ -259,6 +259,7 @@ ipcMain.handle("openai:reviewOpportunity", async (_event, args: {
     responseStyle?: string;
   };
   opportunity?: {
+    reviewId?: string;
     title?: string;
     summary?: string;
     source?: string;
@@ -270,7 +271,7 @@ ipcMain.handle("openai:reviewOpportunity", async (_event, args: {
   };
 }) => {
   try {
-    const prompt = `Review whether this locally-scored RSS item is a real outreach opportunity.\n\nProject:\n${JSON.stringify(args.project || {}, null, 2)}\n\nPost:\n${JSON.stringify(args.opportunity || {}, null, 2)}\n\nReturn strict JSON exactly like:\n{"isOpportunity":true,"opportunityType":"support_question","matchScore":85,"matchStrength":"high","actionSignalStrength":"medium","shouldReply":true,"risk":"low","reason":"short reason"}\n\nopportunityType must be one of support_question, recommendation_request, tool_request, buying_intent, discussion, not_relevant.\nmatchStrength measures original relevance/match quality and must be exactly one of low, medium, high.\nactionSignalStrength measures whether this specific Reddit post is worth replying to, researching, saving, or using as a lead. It should consider buyer intent, urgency, specificity, problem clarity, and whether the user could naturally help. actionSignalStrength must be exactly one of low, medium, high.\nmatchScore should be a number from 0 to 100.\nrisk must be low, medium, or high. Do not include markdown.`;
+    const prompt = `Review whether this locally-scored RSS item is a real outreach opportunity.\n\nProject:\n${JSON.stringify(args.project || {}, null, 2)}\n\nPost:\n${JSON.stringify(args.opportunity || {}, null, 2)}\n\nReturn strict JSON exactly like:\n{"reviewId":"same reviewId from the post","isOpportunity":true,"opportunityType":"support_question","matchScore":85,"matchStrength":"high","actionSignalStrength":"medium","shouldReply":true,"risk":"low","reason":"short reason"}\n\nReturn exactly one result for this input match. If the match is weak, still return a result with actionSignalStrength low.\nopportunityType must be one of support_question, recommendation_request, tool_request, buying_intent, discussion, not_relevant.\nmatchStrength measures original relevance/match quality and must be exactly one of low, medium, high.\nactionSignalStrength measures whether this specific Reddit post is worth replying to, researching, saving, or using as a lead. It should consider buyer intent, urgency, specificity, problem clarity, and whether the user could naturally help. actionSignalStrength must be exactly one of low, medium, high.\nmatchScore should be a number from 0 to 100.\nrisk must be low, medium, or high. Do not include markdown.`;
 
     // Cost-control: this handler is only reached after local keyword and intent scoring passes
     // the user's opt-in threshold and per-scan cap. It is not used for every feed item.
@@ -355,6 +356,7 @@ function normalizeMatchReview(value: any) {
   const risk = ["low", "medium", "high"].includes(value?.risk) ? value.risk : "medium";
 
   return {
+    reviewId: typeof value?.reviewId === "string" ? value.reviewId.trim() : undefined,
     isOpportunity: Boolean(value?.isOpportunity),
     opportunityType,
     matchScore: clampNumber(value?.matchScore ?? value?.matchStrength, 0, 100, 0),

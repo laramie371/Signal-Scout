@@ -76,6 +76,7 @@ declare global {
           responseStyle: string;
         };
         opportunity: {
+          reviewId?: string;
           title: string;
           summary: string;
           source: string;

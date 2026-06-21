@@ -22,6 +22,10 @@ type ScanSummary = {
   reviewFailed?: number;
 };
 
+type BulkAction = "none" | "save" | "responded" | "dismiss";
+
+const AI_REVIEW_BATCH_SIZE = 5;
+
 export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
   const [opportunities, setOpportunities] = useState<Opportunity[]>(() => loadLeads());
   const [isScanning, setIsScanning] = useState(false);
@@ -34,6 +38,7 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
   const [strengthFilter, setStrengthFilter] = useState<"all" | "medium_plus" | "high">("all");
   const [actionSignalFilter, setActionSignalFilter] = useState<"all" | "reviewed" | "medium_plus" | "high">("all");
   const [sortMode, setSortMode] = useState<"default" | "ai_action">("default");
+  const [bulkAction, setBulkAction] = useState<BulkAction>("none");
 
   const settings = loadSettings();
   const feedCount = projects.reduce((total, project) => total + project.feeds.length, 0);
@@ -136,8 +141,22 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
     setOpportunities(updated);
   };
 
+  const applyBulkAction = () => {
+    if (bulkAction === "none") return;
+    const nextStatus = bulkAction === "save"
+      ? "saved"
+      : bulkAction === "dismiss"
+        ? "dismissed"
+        : "responded";
+    bulkStatus(nextStatus);
+    setBulkAction("none");
+  };
+
   const selectAll = () => {
-    setOpportunities((current) => current.map((opportunity) => ({ ...opportunity, selected: true })));
+    const visibleIds = new Set(visibleOpportunities.map((opportunity) => opportunity.id));
+    setOpportunities((current) => current.map((opportunity) => (
+      visibleIds.has(opportunity.id) ? { ...opportunity, selected: true } : opportunity
+    )));
   };
 
   const dismissRead = () => {
@@ -187,27 +206,50 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
 
     const eligibleMatches = visibleOpportunities.filter((opportunity) => (
       !opportunity.aiReviewed
+      && opportunity.aiReviewStatus !== "failed"
       && Boolean(opportunity.title)
       && Boolean(opportunity.url)
       && Boolean(opportunity.id)
     ));
-    const reviewTargets = activeSettings.aiReviewMode === "all"
+    const reviewTargets = (activeSettings.aiReviewMode === "all"
       ? eligibleMatches
-      : eligibleMatches.slice(0, activeSettings.maxAiReviewsPerScan);
+      : eligibleMatches.slice(0, activeSettings.maxAiReviewsPerScan))
+      .map((opportunity) => ({
+        ...opportunity,
+        reviewId: getOpportunityReviewId(opportunity),
+        aiReviewStatus: "pending" as const,
+      }));
+    const batches = chunk(reviewTargets, AI_REVIEW_BATCH_SIZE);
     const progress: AiReviewProgress = {
+      isRunning: reviewTargets.length > 0,
+      total: reviewTargets.length,
+      reviewed: 0,
+      failed: 0,
+      skipped: 0,
+      currentBatch: 0,
+      totalBatches: batches.length,
+      message: reviewTargets.length > 0 ? "AI review queued." : "No matches are ready for AI review.",
       totalReviewTargets: reviewTargets.length,
       reviewedCount: 0,
       failedCount: 0,
+      skippedCount: 0,
       remainingCount: reviewTargets.length,
     };
 
-    console.log("[Signal Scout] dashboard AI review targets", progress);
+    console.log("[Signal Scout] dashboard AI review run started", {
+      totalTargets: reviewTargets.length,
+      mode: activeSettings.aiReviewMode,
+      maxReviewCount: activeSettings.maxAiReviewsPerScan,
+      reviewIds: reviewTargets.map((target) => target.reviewId),
+    });
     setAiReviewProgress(progress);
     setIsReviewing(true);
 
     try {
-      for (const batch of chunk(reviewTargets, 5)) {
-        const settled = await Promise.allSettled(batch.map((opportunity) => reviewDashboardOpportunity(opportunity, activeSettings.openAiKey, activeSettings.openAiModel, projects)));
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+        const batch = batches[batchIndex];
+        console.log("[Signal Scout] dashboard AI review batch started", { batchIndex: batchIndex + 1, size: batch.length });
+        const settled = await reviewDashboardBatch(batch, activeSettings.openAiKey, activeSettings.openAiModel, projects);
         const updates: Opportunity[] = [];
 
         settled.forEach((result, index) => {
@@ -215,19 +257,30 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
           if (result.status === "fulfilled") {
             updates.push(applyAiReview(opportunity, result.value));
             progress.reviewedCount += 1;
+            progress.reviewed += 1;
           } else {
             updates.push({
               ...opportunity,
+              aiReviewed: false,
+              aiReviewStatus: "failed",
               aiReviewFailed: true,
               aiReviewError: result.reason instanceof Error ? result.reason.message : "AI review failed.",
             });
             progress.failedCount += 1;
+            progress.failed += 1;
           }
         });
 
-        progress.remainingCount = Math.max(0, progress.totalReviewTargets - progress.reviewedCount - progress.failedCount);
+        progress.currentBatch = batchIndex + 1;
+        progress.remainingCount = Math.max(0, progress.totalReviewTargets - progress.reviewedCount - progress.failedCount - progress.skippedCount);
+        progress.message = progress.remainingCount === 0
+          ? `AI review complete: ${progress.reviewedCount} reviewed, ${progress.failedCount} failed, ${progress.skippedCount} skipped.`
+          : `Reviewed ${progress.reviewedCount + progress.failedCount + progress.skippedCount} / ${progress.totalReviewTargets}.`;
         const nextProgress = { ...progress, reviewedOpportunities: updates };
-        console.log("[Signal Scout] dashboard AI review progress", nextProgress);
+        console.log("[Signal Scout] dashboard AI review progress", {
+          ...nextProgress,
+          updateIds: updates.map((update) => update.reviewId || getOpportunityReviewId(update)),
+        });
         setAiReviewProgress(nextProgress);
         setOpportunities((current) => {
           const updated = mergeOpportunityLists(current, updates);
@@ -236,6 +289,13 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
         });
       }
     } finally {
+      const doneProgress = {
+        ...progress,
+        isRunning: false,
+        message: `AI review complete: ${progress.reviewedCount} reviewed, ${progress.failedCount} failed, ${progress.skippedCount} skipped.`,
+      };
+      console.log("[Signal Scout] dashboard AI review run finished", doneProgress);
+      setAiReviewProgress(doneProgress);
       setIsReviewing(false);
     }
   };
@@ -278,11 +338,14 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
           )}
         </div>
       )}
-      {aiReviewProgress && (isScanning || isReviewing) && (
+      {aiReviewProgress && (
         <div className="alert info-alert">
-          Reviewed {aiReviewProgress.reviewedCount} of {aiReviewProgress.totalReviewTargets} matches.
-          {aiReviewProgress.failedCount > 0 && ` ${aiReviewProgress.failedCount} failed.`}
-          {` ${aiReviewProgress.remainingCount} remaining.`}
+          {aiReviewProgress.message || `Reviewed ${aiReviewProgress.reviewedCount} of ${aiReviewProgress.totalReviewTargets} matches.`}
+          <br />
+          Reviewed {aiReviewProgress.reviewedCount} / {aiReviewProgress.totalReviewTargets}
+          {` | Failed ${aiReviewProgress.failedCount}`}
+          {` | Skipped ${aiReviewProgress.skippedCount}`}
+          {aiReviewProgress.totalBatches > 0 && ` | Batch ${aiReviewProgress.currentBatch} / ${aiReviewProgress.totalBatches}`}
         </div>
       )}
 
@@ -292,36 +355,58 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
         <div className="metric-card"><strong>{feedCount}</strong><span>RSS feeds</span></div>
       </section>
 
-      <div className="tag-row">
-        <button type="button" onClick={() => setFilter("all")}>All</button>
-        <button type="button" onClick={() => setFilter("new")}>New</button>
-        <button type="button" onClick={() => setFilter("saved")}>Saved</button>
-        <button type="button" onClick={() => setFilter("responded")}>Responded</button>
-        <button type="button" onClick={() => setFilter("dismissed")}>Dismissed</button>
-        <button type="button" onClick={selectAll}>Select All</button>
-        <button type="button" onClick={() => bulkStatus("saved")}>Save Selected</button>
-        <button type="button" onClick={() => bulkStatus("responded")}>Responded Selected</button>
-        <button type="button" onClick={() => bulkStatus("dismissed")}>Dismiss Selected</button>
-        <button type="button" onClick={dismissRead}>Dismiss All Read</button>
-      </div>
-
-      <div className="tag-row">
-        <button type="button" onClick={() => setStrengthFilter("all")}>All matches</button>
-        <button type="button" onClick={() => setStrengthFilter("medium_plus")}>Medium+</button>
-        <button type="button" onClick={() => setStrengthFilter("high")}>High only</button>
-      </div>
-
-      <div className="tag-row">
-        <button type="button" onClick={() => setActionSignalFilter("all")}>All AI actions</button>
-        <button type="button" onClick={() => setActionSignalFilter("reviewed")}>All AI reviewed</button>
-        <button type="button" onClick={() => setActionSignalFilter("medium_plus")}>AI Medium+</button>
-        <button type="button" onClick={() => setActionSignalFilter("high")}>AI High only</button>
-      </div>
-
-      <div className="tag-row">
-        <button type="button" onClick={() => setSortMode("default")}>Default sort</button>
-        <button type="button" onClick={() => setSortMode("ai_action")}>AI action signal</button>
-      </div>
+      <section className="panel controls-panel">
+        <div className="control-grid">
+          <label className="compact-control">
+            Status
+            <select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
+              <option value="all">All active</option>
+              <option value="new">New</option>
+              <option value="saved">Saved</option>
+              <option value="responded">Responded</option>
+              <option value="dismissed">Dismissed</option>
+            </select>
+          </label>
+          <label className="compact-control">
+            Match strength
+            <select value={strengthFilter} onChange={(event) => setStrengthFilter(event.target.value as typeof strengthFilter)}>
+              <option value="all">All matches</option>
+              <option value="medium_plus">Medium+</option>
+              <option value="high">High only</option>
+            </select>
+          </label>
+          <label className="compact-control">
+            AI action
+            <select value={actionSignalFilter} onChange={(event) => setActionSignalFilter(event.target.value as typeof actionSignalFilter)}>
+              <option value="all">All AI actions</option>
+              <option value="reviewed">All AI reviewed</option>
+              <option value="medium_plus">AI Medium+</option>
+              <option value="high">AI High only</option>
+            </select>
+          </label>
+          <label className="compact-control">
+            Sort
+            <select value={sortMode} onChange={(event) => setSortMode(event.target.value as typeof sortMode)}>
+              <option value="default">Default sort</option>
+              <option value="ai_action">AI action signal</option>
+            </select>
+          </label>
+        </div>
+        <div className="controls-actions">
+          <button type="button" className="ghost" onClick={selectAll}>Select all visible</button>
+          <label className="compact-control bulk-control">
+            Bulk action
+            <select value={bulkAction} onChange={(event) => setBulkAction(event.target.value as BulkAction)}>
+              <option value="none">Choose action</option>
+              <option value="save">Save selected</option>
+              <option value="responded">Mark responded</option>
+              <option value="dismiss">Dismiss selected</option>
+            </select>
+          </label>
+          <button type="button" className="ghost" onClick={applyBulkAction} disabled={bulkAction === "none"}>Apply</button>
+          <button type="button" className="ghost" onClick={dismissRead}>Dismiss all read</button>
+        </div>
+      </section>
 
       <section className="section-heading">
         <p className="eyebrow">Opportunity queue</p>
@@ -378,14 +463,18 @@ function mergeOpportunity(found: Opportunity, result: Opportunity): Opportunity 
     aiReviewReason: result.aiReviewReason ?? found.aiReviewReason,
     aiReviewFailed: result.aiReviewFailed ?? found.aiReviewFailed,
     aiReviewError: result.aiReviewError ?? found.aiReviewError,
+    reviewId: result.reviewId ?? found.reviewId,
+    aiReviewStatus: result.aiReviewStatus ?? found.aiReviewStatus,
   };
 }
 
 function mergeOpportunityLists(current: Opportunity[], incoming: Opportunity[]) {
   const map = new Map(current.map((opportunity) => [opportunityKey(opportunity), opportunity]));
+  const reviewIdMap = new Map(current.map((opportunity) => [getOpportunityReviewId(opportunity), opportunityKey(opportunity)]));
 
   for (const opportunity of incoming) {
-    const key = opportunityKey(opportunity);
+    const reviewId = getOpportunityReviewId(opportunity);
+    const key = reviewIdMap.get(reviewId) || opportunityKey(opportunity);
     const found = map.get(key);
     map.set(key, found ? mergeOpportunity(found, opportunity) : opportunity);
   }
@@ -397,9 +486,45 @@ function opportunityKey(opportunity: Opportunity) {
   return opportunity.url || opportunity.id || `${opportunity.title}:${opportunity.source}`;
 }
 
+function getOpportunityReviewId(opportunity: Opportunity) {
+  return opportunity.reviewId
+    || opportunity.id
+    || opportunity.url
+    || `${opportunity.source}:${opportunity.title}:${opportunity.foundAt || ""}`;
+}
+
+async function reviewDashboardBatch(batch: Opportunity[], apiKey: string, model: string, projects: Project[]) {
+  const settled = await Promise.allSettled(batch.map((opportunity) => (
+    reviewDashboardOpportunity(opportunity, apiKey, model, projects)
+  )));
+  const allFailed = settled.length > 0 && settled.every((result) => result.status === "rejected");
+
+  if (!allFailed) {
+    console.log("[Signal Scout] dashboard AI review batch success", {
+      resultCount: settled.filter((result) => result.status === "fulfilled").length,
+      failedCount: settled.filter((result) => result.status === "rejected").length,
+    });
+    return settled;
+  }
+
+  console.warn("[Signal Scout] dashboard AI review batch failed; retrying once", settled.map((result) => (
+    result.status === "rejected" ? formatReviewError(result.reason) : "unknown"
+  )));
+  await wait(750);
+  const retrySettled = await Promise.allSettled(batch.map((opportunity) => (
+    reviewDashboardOpportunity(opportunity, apiKey, model, projects)
+  )));
+  console.log("[Signal Scout] dashboard AI review batch retry finished", {
+    resultCount: retrySettled.filter((result) => result.status === "fulfilled").length,
+    failedCount: retrySettled.filter((result) => result.status === "rejected").length,
+  });
+  return retrySettled;
+}
+
 async function reviewDashboardOpportunity(opportunity: Opportunity, apiKey: string, model: string, projects: Project[]) {
   const project = projects.find((item) => item.id === opportunity.projectId);
   if (!project) throw new Error("Missing project for AI review.");
+  const reviewId = getOpportunityReviewId(opportunity);
 
   const result = await window.signalScout?.openAiReviewOpportunity({
     apiKey,
@@ -412,6 +537,7 @@ async function reviewDashboardOpportunity(opportunity: Opportunity, apiKey: stri
       responseStyle: project.responseStyle,
     },
     opportunity: {
+      reviewId,
       title: opportunity.title,
       summary: opportunity.summary,
       source: opportunity.subreddit || opportunity.source,
@@ -427,13 +553,22 @@ async function reviewDashboardOpportunity(opportunity: Opportunity, apiKey: stri
     throw new Error(result?.error || "AI review returned no result.");
   }
 
-  return result.review;
+  if (result.review.reviewId && result.review.reviewId !== reviewId) {
+    console.warn("[Signal Scout] dashboard AI review ID mismatch", {
+      expected: reviewId,
+      received: result.review.reviewId,
+    });
+  }
+
+  return { ...result.review, reviewId };
 }
 
 function applyAiReview(opportunity: Opportunity, review: AiMatchReview): Opportunity {
   return {
     ...opportunity,
+    reviewId: review.reviewId || getOpportunityReviewId(opportunity),
     aiReviewed: true,
+    aiReviewStatus: "reviewed",
     aiReviewFailed: false,
     aiReviewError: undefined,
     aiMatchStrength: review.matchScore,
@@ -443,6 +578,14 @@ function applyAiReview(opportunity: Opportunity, review: AiMatchReview): Opportu
     aiReviewReason: review.reason,
     intent: review.isOpportunity && review.opportunityType !== "not_relevant" ? review.opportunityType : opportunity.intent,
   };
+}
+
+function formatReviewError(error: unknown) {
+  return error instanceof Error ? error.message : "AI review failed.";
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function chunk<T>(items: T[], size: number) {
@@ -469,6 +612,8 @@ function hasOpportunityChanged(current: Opportunity, next: Opportunity) {
     || current.aiReviewReason !== next.aiReviewReason
     || current.aiReviewFailed !== next.aiReviewFailed
     || current.aiReviewError !== next.aiReviewError
+    || current.reviewId !== next.reviewId
+    || current.aiReviewStatus !== next.aiReviewStatus
     || JSON.stringify(current.matchExplanation || []) !== JSON.stringify(next.matchExplanation || [])
     || !sameStringArray(current.matchedKeywords, next.matchedKeywords)
     || !sameStringArray(current.avoidedKeywords, next.avoidedKeywords)

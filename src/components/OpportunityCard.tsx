@@ -155,6 +155,7 @@ export function OpportunityCard({ opportunity, project, onStatusChange, onUpdate
         ))}
         {project && <span className="project-tag">{project.name}</span>}
         {opportunity.aiReviewed && <span className="status-pill connected">AI reviewed</span>}
+        {opportunity.aiReviewStatus === "failed" && <span className="status-pill danger-pill">AI review failed</span>}
         {opportunity.aiRisk && <span className="status-pill">Risk: {opportunity.aiRisk}</span>}
       </div>
 

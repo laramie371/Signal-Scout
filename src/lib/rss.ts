@@ -28,9 +28,18 @@ export type ScanOptions = {
 };
 
 export type AiReviewProgress = {
+  isRunning: boolean;
+  total: number;
+  reviewed: number;
+  failed: number;
+  skipped: number;
+  currentBatch: number;
+  totalBatches: number;
+  message: string;
   totalReviewTargets: number;
   reviewedCount: number;
   failedCount: number;
+  skippedCount: number;
   remainingCount: number;
   reviewedOpportunities?: Opportunity[];
 };
@@ -44,6 +53,8 @@ type ReviewCandidate = {
   aiReview?: AiMatchReview;
   aiReviewFailed?: boolean;
   aiReviewError?: string;
+  reviewId?: string;
+  aiReviewStatus?: Opportunity["aiReviewStatus"];
 };
 
 export async function scanFeedsForProjects(projects: Project[], options: ScanOptions): Promise<Opportunity[]> {
@@ -138,6 +149,8 @@ function buildOpportunity(candidate: ReviewCandidate): Opportunity {
     aiReviewReason: aiReview?.reason,
     aiReviewFailed: candidate.aiReviewFailed,
     aiReviewError: candidate.aiReviewError,
+    reviewId: candidate.reviewId || getCandidateReviewId(candidate),
+    aiReviewStatus: candidate.aiReviewStatus,
   };
 }
 
@@ -146,21 +159,38 @@ async function reviewCandidatesWithAi(candidates: ReviewCandidate[], options: Sc
   if (!options.openAiKey || !options.enableAiMatchReview) return;
 
   const eligibleCandidates = candidates.filter((candidate) => candidate.scored.score >= options.aiReviewThreshold);
-  const reviewTargets = options.aiReviewMode === "all"
+  const reviewTargets = (options.aiReviewMode === "all"
     ? eligibleCandidates
-    : eligibleCandidates.slice(0, options.maxAiReviewsPerScan);
+    : eligibleCandidates.slice(0, options.maxAiReviewsPerScan))
+    .map((candidate) => {
+      candidate.reviewId = getCandidateReviewId(candidate);
+      candidate.aiReviewStatus = "pending";
+      return candidate;
+    });
+  const batches = chunk(reviewTargets, AI_REVIEW_BATCH_SIZE);
   const progress: AiReviewProgress = {
+    isRunning: reviewTargets.length > 0,
+    total: reviewTargets.length,
+    reviewed: 0,
+    failed: 0,
+    skipped: 0,
+    currentBatch: 0,
+    totalBatches: batches.length,
+    message: reviewTargets.length > 0 ? "AI review queued." : "No AI review targets.",
     totalReviewTargets: reviewTargets.length,
     reviewedCount: 0,
     failedCount: 0,
+    skippedCount: 0,
     remainingCount: reviewTargets.length,
   };
 
   console.log("[Signal Scout] AI review targets", progress);
   options.onAiReviewProgress?.(progress);
 
-  for (const batch of chunk(reviewTargets, AI_REVIEW_BATCH_SIZE)) {
-    const settled = await Promise.allSettled(batch.map((candidate) => reviewSingleCandidateWithAi(candidate, options)));
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    const batch = batches[batchIndex];
+    console.log("[Signal Scout] AI review batch started", { batchIndex: batchIndex + 1, size: batch.length });
+    const settled = await reviewCandidateBatch(batch, options);
 
     settled.forEach((result, index) => {
       const candidate = batch[index];
@@ -168,23 +198,58 @@ async function reviewCandidatesWithAi(candidates: ReviewCandidate[], options: Sc
         candidate.aiReview = result.value;
         candidate.aiReviewFailed = false;
         candidate.aiReviewError = undefined;
+        candidate.aiReviewStatus = "reviewed";
         progress.reviewedCount += 1;
+        progress.reviewed += 1;
       } else {
         candidate.aiReviewFailed = true;
         candidate.aiReviewError = result.status === "rejected"
           ? formatReviewError(result.reason)
           : "AI review returned no result.";
+        candidate.aiReviewStatus = "failed";
         progress.failedCount += 1;
+        progress.failed += 1;
       }
     });
 
-    progress.remainingCount = Math.max(0, progress.totalReviewTargets - progress.reviewedCount - progress.failedCount);
+    progress.currentBatch = batchIndex + 1;
+    progress.remainingCount = Math.max(0, progress.totalReviewTargets - progress.reviewedCount - progress.failedCount - progress.skippedCount);
+    progress.message = progress.remainingCount === 0
+      ? `AI review complete: ${progress.reviewedCount} reviewed, ${progress.failedCount} failed, ${progress.skippedCount} skipped.`
+      : `Reviewed ${progress.reviewedCount + progress.failedCount + progress.skippedCount} / ${progress.totalReviewTargets}.`;
     console.log("[Signal Scout] AI review progress", progress);
     options.onAiReviewProgress?.({
       ...progress,
       reviewedOpportunities: batch.map((candidate) => buildOpportunity(candidate)),
     });
   }
+
+  progress.isRunning = false;
+  progress.message = `AI review complete: ${progress.reviewedCount} reviewed, ${progress.failedCount} failed, ${progress.skippedCount} skipped.`;
+  console.log("[Signal Scout] AI review finished", progress);
+}
+
+async function reviewCandidateBatch(batch: ReviewCandidate[], options: ScanOptions): Promise<PromiseSettledResult<AiMatchReview>[]> {
+  const settled = await Promise.allSettled(batch.map((candidate) => reviewSingleCandidateWithAi(candidate, options)));
+  const allFailed = settled.length > 0 && settled.every((result) => result.status === "rejected");
+  if (!allFailed) {
+    console.log("[Signal Scout] AI review batch success", {
+      resultCount: settled.filter((result) => result.status === "fulfilled").length,
+      failedCount: settled.filter((result) => result.status === "rejected").length,
+    });
+    return settled;
+  }
+
+  console.warn("[Signal Scout] AI review batch failed; retrying once", settled.map((result) => (
+    result.status === "rejected" ? formatReviewError(result.reason) : "unknown"
+  )));
+  await wait(750);
+  const retrySettled = await Promise.allSettled(batch.map((candidate) => reviewSingleCandidateWithAi(candidate, options)));
+  console.log("[Signal Scout] AI review batch retry finished", {
+    resultCount: retrySettled.filter((result) => result.status === "fulfilled").length,
+    failedCount: retrySettled.filter((result) => result.status === "rejected").length,
+  });
+  return retrySettled;
 }
 
 async function reviewSingleCandidateWithAi(candidate: ReviewCandidate, options: ScanOptions) {
@@ -202,6 +267,7 @@ async function reviewSingleCandidateWithAi(candidate: ReviewCandidate, options: 
       responseStyle: project.responseStyle,
     },
     opportunity: {
+      reviewId: candidate.reviewId || getCandidateReviewId(candidate),
       title: item.title,
       summary: trimText(item.content, 600),
       source: item.feedTitle,
@@ -218,6 +284,12 @@ async function reviewSingleCandidateWithAi(candidate: ReviewCandidate, options: 
   }
 
   return result.review;
+}
+
+function getCandidateReviewId(candidate: ReviewCandidate) {
+  return candidate.item.id
+    || candidate.item.link
+    || `${candidate.project.id}:${candidate.item.feedUrl}:${candidate.item.title}:${candidate.item.pubDate}`;
 }
 
 function chunk<T>(items: T[], size: number) {
@@ -280,4 +352,8 @@ function hashString(value: string) {
     hash |= 0;
   }
   return Math.abs(hash).toString(36);
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
