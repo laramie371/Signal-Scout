@@ -3,7 +3,12 @@ import type { Opportunity, Project } from "../types/project";
 import { OpportunityCard } from "../components/OpportunityCard";
 import { scanFeedsForProjects } from "../lib/rss";
 import { loadLeads, loadSettings, saveLeads } from "../lib/storage";
-import { getMatchStrengthRank, getOpportunityMatchStrength } from "../lib/matchStrength";
+import {
+  getActionSignalRank,
+  getMatchStrengthRank,
+  getOpportunityActionSignalStrength,
+  getOpportunityMatchStrength,
+} from "../lib/matchStrength";
 
 type DashboardProps = {
   projects: Project[];
@@ -24,6 +29,7 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
   const [scanSummary, setScanSummary] = useState<ScanSummary | null>(null);
   const [filter, setFilter] = useState<"all" | Opportunity["status"]>("all");
   const [strengthFilter, setStrengthFilter] = useState<"all" | "medium_plus" | "high">("all");
+  const [actionSignalFilter, setActionSignalFilter] = useState<"all" | "reviewed" | "medium_plus" | "high">("all");
 
   const settings = loadSettings();
   const feedCount = projects.reduce((total, project) => total + project.feeds.length, 0);
@@ -143,9 +149,21 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
       const strength = getOpportunityMatchStrength(opportunity);
       if (strengthFilter === "high") return strength === "high";
       if (strengthFilter === "medium_plus") return strength === "medium" || strength === "high";
+      if (actionSignalFilter !== "all") {
+        if (!opportunity.aiReviewed) return false;
+        const actionSignal = getOpportunityActionSignalStrength(opportunity);
+        if (actionSignalFilter === "reviewed") return true;
+        if (actionSignalFilter === "high") return actionSignal === "high";
+        if (actionSignalFilter === "medium_plus") return actionSignal === "medium" || actionSignal === "high";
+      }
       return true;
     })
     .sort((left, right) => {
+      if (left.aiReviewed && right.aiReviewed) {
+        const actionDelta = getActionSignalRank(getOpportunityActionSignalStrength(right)) - getActionSignalRank(getOpportunityActionSignalStrength(left));
+        if (actionDelta !== 0) return actionDelta;
+      }
+      if (left.aiReviewed !== right.aiReviewed) return left.aiReviewed ? -1 : 1;
       const strengthDelta = getMatchStrengthRank(getOpportunityMatchStrength(right)) - getMatchStrengthRank(getOpportunityMatchStrength(left));
       if (strengthDelta !== 0) return strengthDelta;
       return right.score - left.score || new Date(right.foundAt).getTime() - new Date(left.foundAt).getTime();
@@ -211,6 +229,13 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
         <button type="button" onClick={() => setStrengthFilter("high")}>High only</button>
       </div>
 
+      <div className="tag-row">
+        <button type="button" onClick={() => setActionSignalFilter("all")}>All AI actions</button>
+        <button type="button" onClick={() => setActionSignalFilter("reviewed")}>All AI reviewed</button>
+        <button type="button" onClick={() => setActionSignalFilter("medium_plus")}>AI Medium+</button>
+        <button type="button" onClick={() => setActionSignalFilter("high")}>AI High only</button>
+      </div>
+
       <section className="section-heading">
         <p className="eyebrow">Opportunity queue</p>
         <h2>Review matches</h2>
@@ -260,6 +285,7 @@ function hasOpportunityChanged(current: Opportunity, next: Opportunity) {
     || current.aiReviewed !== next.aiReviewed
     || current.aiMatchStrength !== next.aiMatchStrength
     || current.matchStrength !== next.matchStrength
+    || current.actionSignalStrength !== next.actionSignalStrength
     || current.aiRisk !== next.aiRisk
     || current.aiReviewReason !== next.aiReviewReason
     || JSON.stringify(current.matchExplanation || []) !== JSON.stringify(next.matchExplanation || [])

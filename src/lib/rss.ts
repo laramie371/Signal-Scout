@@ -120,6 +120,7 @@ function buildOpportunity(
     aiReviewed: Boolean(aiReview),
     aiMatchStrength: aiReview?.matchScore,
     matchStrength: aiReview?.matchStrength,
+    actionSignalStrength: aiReview?.actionSignalStrength,
     aiRisk: aiReview?.risk,
     aiReviewReason: aiReview?.reason,
   };

@@ -57,6 +57,7 @@ export interface Opportunity {
   aiReviewed?: boolean;
   aiMatchStrength?: number;
   matchStrength?: MatchStrength;
+  actionSignalStrength?: MatchStrength;
   aiRisk?: AiRisk;
   aiReviewReason?: string;
   isRead?: boolean;
@@ -99,6 +100,7 @@ export interface AiMatchReview {
   opportunityType: LeadIntent | "not_relevant";
   matchScore: number;
   matchStrength: MatchStrength;
+  actionSignalStrength: MatchStrength;
   shouldReply: boolean;
   risk: AiRisk;
   reason: string;

@@ -38,3 +38,35 @@ export function getMatchStrengthRank(strength: MatchStrength) {
   if (strength === "medium") return 2;
   return 1;
 }
+
+export function normalizeActionSignalStrength(value: unknown, fallbackScore?: number): MatchStrength {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["strong", "high", "actionable", "good lead"].includes(normalized)) return "high";
+    if (["maybe", "possible", "moderate", "medium"].includes(normalized)) return "medium";
+    if (["weak", "skip", "poor", "not actionable", "low"].includes(normalized)) return "low";
+  }
+
+  return strengthFromScore(fallbackScore || 0);
+}
+
+export function getOpportunityActionSignalStrength(opportunity: Opportunity): MatchStrength {
+  return normalizeActionSignalStrength(
+    opportunity.actionSignalStrength,
+    opportunity.aiMatchStrength ?? opportunity.score,
+  );
+}
+
+export function getActionSignalLabel(strength: MatchStrength) {
+  if (strength === "high") return "Strong action signal";
+  if (strength === "medium") return "Maybe action signal";
+  return "Low action signal";
+}
+
+export function getActionSignalClass(strength: MatchStrength) {
+  return `action-signal-${strength}`;
+}
+
+export function getActionSignalRank(strength: MatchStrength) {
+  return getMatchStrengthRank(strength);
+}

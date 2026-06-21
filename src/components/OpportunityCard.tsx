@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { loadSettings } from "../lib/storage";
-import { getMatchStrengthClass, getMatchStrengthLabel, getOpportunityMatchStrength } from "../lib/matchStrength";
+import {
+  getActionSignalClass,
+  getActionSignalLabel,
+  getMatchStrengthClass,
+  getMatchStrengthLabel,
+  getOpportunityActionSignalStrength,
+  getOpportunityMatchStrength,
+} from "../lib/matchStrength";
 import type { AiResponse, Opportunity, Project } from "../types/project";
 
 type OpportunityCardProps = {
@@ -15,6 +22,7 @@ export function OpportunityCard({ opportunity, project, onStatusChange, onUpdate
   const [responseError, setResponseError] = useState("");
   const cardRef = useRef<HTMLElement | null>(null);
   const matchStrength = getOpportunityMatchStrength(opportunity);
+  const actionSignalStrength = getOpportunityActionSignalStrength(opportunity);
 
   useEffect(() => {
     const element = cardRef.current;
@@ -161,7 +169,17 @@ export function OpportunityCard({ opportunity, project, onStatusChange, onUpdate
         </div>
       )}
 
-      {opportunity.aiReviewReason && <p className="ai-reason">AI review: {opportunity.aiReviewReason}</p>}
+      {opportunity.aiReviewed && (
+        <div className={`ai-review-panel ${getActionSignalClass(actionSignalStrength)}`}>
+          <div className="tag-row">
+            <span className="draft-box-title">AI Action Signal</span>
+            <span className={`action-signal-badge ${getActionSignalClass(actionSignalStrength)}`}>
+              {getActionSignalLabel(actionSignalStrength)}
+            </span>
+          </div>
+          {opportunity.aiReviewReason && <p>AI review: {opportunity.aiReviewReason}</p>}
+        </div>
+      )}
       {responseError && <div className="alert error-alert">{responseError}</div>}
 
       {opportunity.aiResponse && (
