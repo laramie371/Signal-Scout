@@ -23,6 +23,8 @@ export type LeadIntent =
 
 export type AiRisk = "low" | "medium" | "high";
 export type KeywordMatchMode = "high_recall" | "exact_phrase";
+export type MatchStrength = "low" | "medium" | "high";
+export type AiReviewMode = "top_n" | "all";
 
 export interface AiResponse {
   shouldReply: boolean;
@@ -54,6 +56,7 @@ export interface Opportunity {
   matchExplanation?: string[];
   aiReviewed?: boolean;
   aiMatchStrength?: number;
+  matchStrength?: MatchStrength;
   aiRisk?: AiRisk;
   aiReviewReason?: string;
   isRead?: boolean;
@@ -72,6 +75,7 @@ export interface AppSettings {
   enableAiMatchReview: boolean;
   aiReviewThreshold: number;
   maxAiReviewsPerScan: number;
+  aiReviewMode: AiReviewMode;
   keywordMatchMode: KeywordMatchMode;
 }
 
@@ -93,7 +97,8 @@ export interface OpportunitySuggestion {
 export interface AiMatchReview {
   isOpportunity: boolean;
   opportunityType: LeadIntent | "not_relevant";
-  matchStrength: number;
+  matchScore: number;
+  matchStrength: MatchStrength;
   shouldReply: boolean;
   risk: AiRisk;
   reason: string;

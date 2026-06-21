@@ -3,6 +3,7 @@ import type { Opportunity, Project } from "../types/project";
 import { OpportunityCard } from "../components/OpportunityCard";
 import { scanFeedsForProjects } from "../lib/rss";
 import { loadLeads, loadSettings, saveLeads } from "../lib/storage";
+import { getMatchStrengthRank, getOpportunityMatchStrength } from "../lib/matchStrength";
 
 type DashboardProps = {
   projects: Project[];
@@ -22,6 +23,7 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
   const [lastScan, setLastScan] = useState("");
   const [scanSummary, setScanSummary] = useState<ScanSummary | null>(null);
   const [filter, setFilter] = useState<"all" | Opportunity["status"]>("all");
+  const [strengthFilter, setStrengthFilter] = useState<"all" | "medium_plus" | "high">("all");
 
   const settings = loadSettings();
   const feedCount = projects.reduce((total, project) => total + project.feeds.length, 0);
@@ -44,6 +46,7 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
         enableAiMatchReview: activeSettings.enableAiMatchReview,
         aiReviewThreshold: activeSettings.aiReviewThreshold,
         maxAiReviewsPerScan: activeSettings.maxAiReviewsPerScan,
+        aiReviewMode: activeSettings.aiReviewMode,
         keywordMatchMode: activeSettings.keywordMatchMode,
       });
       const existing = loadLeads();
@@ -131,12 +134,22 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
     setOpportunities(updated);
   };
 
-  const visibleOpportunities = opportunities.filter((opportunity) => {
-    if (filter !== "all") return opportunity.status === filter;
-    if (settings.hideDismissed && opportunity.status === "dismissed") return false;
-    if (settings.hideResponded && opportunity.status === "responded") return false;
-    return true;
-  });
+  const visibleOpportunities = opportunities
+    .filter((opportunity) => {
+      if (filter !== "all" && opportunity.status !== filter) return false;
+      if (filter === "all" && settings.hideDismissed && opportunity.status === "dismissed") return false;
+      if (filter === "all" && settings.hideResponded && opportunity.status === "responded") return false;
+
+      const strength = getOpportunityMatchStrength(opportunity);
+      if (strengthFilter === "high") return strength === "high";
+      if (strengthFilter === "medium_plus") return strength === "medium" || strength === "high";
+      return true;
+    })
+    .sort((left, right) => {
+      const strengthDelta = getMatchStrengthRank(getOpportunityMatchStrength(right)) - getMatchStrengthRank(getOpportunityMatchStrength(left));
+      if (strengthDelta !== 0) return strengthDelta;
+      return right.score - left.score || new Date(right.foundAt).getTime() - new Date(left.foundAt).getTime();
+    });
 
   return (
     <main className="page-stack">
@@ -192,6 +205,12 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
         <button type="button" onClick={dismissRead}>Dismiss All Read</button>
       </div>
 
+      <div className="tag-row">
+        <button type="button" onClick={() => setStrengthFilter("all")}>All matches</button>
+        <button type="button" onClick={() => setStrengthFilter("medium_plus")}>Medium+</button>
+        <button type="button" onClick={() => setStrengthFilter("high")}>High only</button>
+      </div>
+
       <section className="section-heading">
         <p className="eyebrow">Opportunity queue</p>
         <h2>Review matches</h2>
@@ -240,6 +259,7 @@ function hasOpportunityChanged(current: Opportunity, next: Opportunity) {
     || current.intentScore !== next.intentScore
     || current.aiReviewed !== next.aiReviewed
     || current.aiMatchStrength !== next.aiMatchStrength
+    || current.matchStrength !== next.matchStrength
     || current.aiRisk !== next.aiRisk
     || current.aiReviewReason !== next.aiReviewReason
     || JSON.stringify(current.matchExplanation || []) !== JSON.stringify(next.matchExplanation || [])

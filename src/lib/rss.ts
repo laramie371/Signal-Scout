@@ -22,6 +22,7 @@ export type ScanOptions = {
   enableAiMatchReview: boolean;
   aiReviewThreshold: number;
   maxAiReviewsPerScan: number;
+  aiReviewMode: "top_n" | "all";
   keywordMatchMode: "high_recall" | "exact_phrase";
 };
 
@@ -96,7 +97,7 @@ function buildOpportunity(
 ): Opportunity {
   const matched = scored.matchedKeywords;
   const sourceName = cleanFeedTitle(item.feedTitle, item.feedUrl);
-  const displayScore = aiReview?.isOpportunity ? aiReview.matchStrength : scored.score;
+  const displayScore = aiReview?.isOpportunity ? aiReview.matchScore : scored.score;
 
   return {
     id: `${project.id}-${item.id || hashString(item.link)}`,
@@ -117,7 +118,8 @@ function buildOpportunity(
     intentScore: scored.intentScore,
     matchExplanation: scored.explanation,
     aiReviewed: Boolean(aiReview),
-    aiMatchStrength: aiReview?.matchStrength,
+    aiMatchStrength: aiReview?.matchScore,
+    matchStrength: aiReview?.matchStrength,
     aiRisk: aiReview?.risk,
     aiReviewReason: aiReview?.reason,
   };
@@ -133,34 +135,39 @@ async function maybeReviewMatchWithAi(
   if (!window.signalScout?.openAiReviewOpportunity) return undefined;
   if (!options.openAiKey || !options.enableAiMatchReview) return undefined;
   if (scored.score < options.aiReviewThreshold) return undefined;
-  if (aiReviewsUsed >= options.maxAiReviewsPerScan) return undefined;
+  if (options.aiReviewMode !== "all" && aiReviewsUsed >= options.maxAiReviewsPerScan) return undefined;
 
   // Cost-control: AI match review is opt-in and only runs after local scoring has already found
   // a strong candidate. This avoids sending every RSS item to OpenAI during scans.
-  const result = await window.signalScout.openAiReviewOpportunity({
-    apiKey: options.openAiKey,
-    model: options.openAiModel,
-    project: {
-      name: project.name,
-      description: project.description,
-      keywords: project.keywords,
-      avoidKeywords: project.avoidKeywords,
-      responseStyle: project.responseStyle,
-    },
-    opportunity: {
-      title: item.title,
-      summary: trimText(item.content, 600),
-      source: item.feedTitle,
-      url: item.link,
-      matchedKeywords: scored.matchedKeywords,
-      score: scored.score,
-      intent: scored.intent,
-      matchExplanation: scored.explanation,
-    },
-  });
+  try {
+    const result = await window.signalScout.openAiReviewOpportunity({
+      apiKey: options.openAiKey,
+      model: options.openAiModel,
+      project: {
+        name: project.name,
+        description: project.description,
+        keywords: project.keywords,
+        avoidKeywords: project.avoidKeywords,
+        responseStyle: project.responseStyle,
+      },
+      opportunity: {
+        title: item.title,
+        summary: trimText(item.content, 600),
+        source: item.feedTitle,
+        url: item.link,
+        matchedKeywords: scored.matchedKeywords,
+        score: scored.score,
+        intent: scored.intent,
+        matchExplanation: scored.explanation,
+      },
+    });
 
-  if (!result.ok) return undefined;
-  return result.review;
+    if (!result.ok) return undefined;
+    return result.review;
+  } catch (error) {
+    console.error("[Signal Scout] AI match review failed", error);
+    return undefined;
+  }
 }
 
 function cleanFeedTitle(title: string, feedUrl: string) {

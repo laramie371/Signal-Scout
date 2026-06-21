@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { loadSettings } from "../lib/storage";
+import { getMatchStrengthClass, getMatchStrengthLabel, getOpportunityMatchStrength } from "../lib/matchStrength";
 import type { AiResponse, Opportunity, Project } from "../types/project";
 
 type OpportunityCardProps = {
@@ -13,6 +14,7 @@ export function OpportunityCard({ opportunity, project, onStatusChange, onUpdate
   const [isGenerating, setIsGenerating] = useState(false);
   const [responseError, setResponseError] = useState("");
   const cardRef = useRef<HTMLElement | null>(null);
+  const matchStrength = getOpportunityMatchStrength(opportunity);
 
   useEffect(() => {
     const element = cardRef.current;
@@ -120,7 +122,7 @@ export function OpportunityCard({ opportunity, project, onStatusChange, onUpdate
   };
 
   return (
-    <article ref={cardRef} className="opportunity-card">
+    <article ref={cardRef} className={`opportunity-card ${getMatchStrengthClass(matchStrength)}`}>
       <div className="card-topline">
         <input
           type="checkbox"
@@ -128,6 +130,7 @@ export function OpportunityCard({ opportunity, project, onStatusChange, onUpdate
           onChange={() => onUpdate?.({ ...opportunity, selected: !opportunity.selected })}
         />
         <span className="score-pill">{opportunity.score}% match</span>
+        <span className={`match-strength-badge ${getMatchStrengthClass(matchStrength)}`}>{getMatchStrengthLabel(matchStrength)}</span>
         {opportunity.intent && <span className="status-pill">{formatIntent(opportunity.intent)}</span>}
         <span>{opportunity.source} / {opportunity.subreddit}</span>
       </div>

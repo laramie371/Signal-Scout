@@ -264,6 +264,21 @@
   padding: 22px;
 }
 
+.opportunity-card.match-strength-low {
+  border-color: rgba(220, 38, 38, 0.30);
+  background: rgba(255, 247, 247, 0.88);
+}
+
+.opportunity-card.match-strength-medium {
+  border-color: rgba(217, 119, 6, 0.34);
+  background: rgba(255, 251, 235, 0.88);
+}
+
+.opportunity-card.match-strength-high {
+  border-color: rgba(22, 163, 74, 0.32);
+  background: rgba(240, 253, 244, 0.88);
+}
+
 .card-topline,
 .card-actions,
 .tag-row {
@@ -457,6 +472,30 @@ textarea:focus {
 }
 
 .status-pill.connected {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.match-strength-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.match-strength-badge.match-strength-low {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.match-strength-badge.match-strength-medium {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.match-strength-badge.match-strength-high {
   color: #166534;
   background: #dcfce7;
 }

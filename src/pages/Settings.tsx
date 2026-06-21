@@ -244,6 +244,31 @@ export function Settings({ onRestoreProjects }: SettingsProps) {
           Enable AI match review
         </label>
 
+        <div>
+          <p className="eyebrow">Review mode</p>
+          <div className="button-row">
+            <label className="checkbox-label">
+              <input
+                type="radio"
+                name="aiReviewMode"
+                checked={settings.aiReviewMode === "top_n"}
+                onChange={() => updateSetting("aiReviewMode", "top_n")}
+              />
+              Review top N matches
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="radio"
+                name="aiReviewMode"
+                checked={settings.aiReviewMode === "all"}
+                onChange={() => updateSetting("aiReviewMode", "all")}
+              />
+              Review all current matches
+            </label>
+          </div>
+          {settings.aiReviewMode === "all" && <small>Reviewing all matches may use more AI credits.</small>}
+        </div>
+
         <div className="two-column-grid">
           <label>
             AI review threshold

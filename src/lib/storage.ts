@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   enableAiMatchReview: false,
   aiReviewThreshold: 70,
   maxAiReviewsPerScan: 5,
+  aiReviewMode: "top_n",
   keywordMatchMode: "high_recall",
 };
 
@@ -105,6 +106,7 @@ function normalizeSettings(value: Partial<AppSettings> | undefined | null): AppS
     enableAiMatchReview: value?.enableAiMatchReview ?? DEFAULT_SETTINGS.enableAiMatchReview,
     aiReviewThreshold: numberOrDefault(value?.aiReviewThreshold, DEFAULT_SETTINGS.aiReviewThreshold, 0, 100),
     maxAiReviewsPerScan: numberOrDefault(value?.maxAiReviewsPerScan, DEFAULT_SETTINGS.maxAiReviewsPerScan, 0, 100),
+    aiReviewMode: value?.aiReviewMode === "all" ? "all" : DEFAULT_SETTINGS.aiReviewMode,
     keywordMatchMode: value?.keywordMatchMode === "exact_phrase" ? "exact_phrase" : DEFAULT_SETTINGS.keywordMatchMode,
     openAiModel: typeof value?.openAiModel === "string" && value.openAiModel.trim()
       ? value.openAiModel.trim()
