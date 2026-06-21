@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   openAiKey: "",
   openAiModel: DEFAULT_OPENAI_MODEL,
   minimumOpportunityScore: 50,
-  postsPerFeed: 25,
+  postsPerFeed: 50,
   maxFeedAgeDays: 30,
   autoMarkReadSeconds: 2,
   hideDismissed: true,
@@ -97,14 +97,14 @@ function normalizeSettings(value: Partial<AppSettings> | undefined | null): AppS
   return {
     openAiKey: typeof value?.openAiKey === "string" ? value.openAiKey.trim() : loadOpenAiKey(),
     minimumOpportunityScore: numberOrDefault(value?.minimumOpportunityScore, DEFAULT_SETTINGS.minimumOpportunityScore, 0, 99),
-    postsPerFeed: numberOrDefault(value?.postsPerFeed, DEFAULT_SETTINGS.postsPerFeed, 1, 50),
+    postsPerFeed: numberOrDefault(value?.postsPerFeed, DEFAULT_SETTINGS.postsPerFeed, 1, 150),
     maxFeedAgeDays: numberOrDefault(value?.maxFeedAgeDays, DEFAULT_SETTINGS.maxFeedAgeDays, 1, 365),
     autoMarkReadSeconds: numberOrDefault(value?.autoMarkReadSeconds, DEFAULT_SETTINGS.autoMarkReadSeconds, 0, 60),
     hideDismissed: value?.hideDismissed ?? DEFAULT_SETTINGS.hideDismissed,
     hideResponded: value?.hideResponded ?? DEFAULT_SETTINGS.hideResponded,
     enableAiMatchReview: value?.enableAiMatchReview ?? DEFAULT_SETTINGS.enableAiMatchReview,
     aiReviewThreshold: numberOrDefault(value?.aiReviewThreshold, DEFAULT_SETTINGS.aiReviewThreshold, 0, 100),
-    maxAiReviewsPerScan: numberOrDefault(value?.maxAiReviewsPerScan, DEFAULT_SETTINGS.maxAiReviewsPerScan, 0, 25),
+    maxAiReviewsPerScan: numberOrDefault(value?.maxAiReviewsPerScan, DEFAULT_SETTINGS.maxAiReviewsPerScan, 0, 100),
     keywordMatchMode: value?.keywordMatchMode === "exact_phrase" ? "exact_phrase" : DEFAULT_SETTINGS.keywordMatchMode,
     openAiModel: typeof value?.openAiModel === "string" && value.openAiModel.trim()
       ? value.openAiModel.trim()

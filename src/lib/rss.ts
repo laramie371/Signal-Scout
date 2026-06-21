@@ -76,7 +76,7 @@ export async function scanFeedsForProjects(projects: Project[], options: ScanOpt
 
   return opportunities
     .sort((a, b) => b.score - a.score || new Date(b.foundAt).getTime() - new Date(a.foundAt).getTime())
-    .slice(0, 80);
+    .slice(0, 250);
 }
 
 function buildFeeds(project: Project): string[] {
@@ -84,7 +84,7 @@ function buildFeeds(project: Project): string[] {
     .map((feed) => feed.trim())
     .filter(Boolean)
     .filter((feed, index, all) => all.indexOf(feed) === index)
-    .slice(0, 12);
+    .slice(0, 60);
 }
 
 function buildOpportunity(

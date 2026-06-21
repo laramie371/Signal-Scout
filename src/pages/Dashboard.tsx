@@ -155,8 +155,8 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
       </section>
 
       <div className="alert info-alert">
-        RSS mode: no Reddit API key required. Each project scans up to 12 feeds x {settings.postsPerFeed} recent items, then scores matches locally.
-        Add focused feeds on the Projects page for better results.
+        RSS mode: no Reddit API key required. Each project scans up to 60 feeds x {settings.postsPerFeed} recent items, then scores matches locally.
+        More focused feeds and lower score thresholds will surface more leads.
       </div>
 
       {scanError && <div className="alert error-alert">{scanError}</div>}

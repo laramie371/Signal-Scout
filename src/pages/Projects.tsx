@@ -44,10 +44,13 @@ export function Projects({ projects, onAddProject, onDeleteProject }: ProjectsPr
     setLeads(updated);
     onDeleteProject(projectId);
 
-    // Force a fresh ProjectForm instance after deletion. The app was occasionally leaving
-    // controlled input fields in a weird temporarily unresponsive state until refresh.
-    // Remounting the form gives the user the same clean state a manual refresh did.
+    // Force a fresh ProjectForm instance immediately, then do the same hard reload
+    // the user was doing manually. This avoids the rare Electron/WebView input lockup
+    // after a project and its leads are removed from localStorage.
     setProjectFormKey((key) => key + 1);
+    window.setTimeout(() => {
+      window.location.reload();
+    }, 250);
   };
 
   return (

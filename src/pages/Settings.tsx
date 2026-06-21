@@ -166,7 +166,7 @@ export function Settings({ onRestoreProjects }: SettingsProps) {
             <input
               type="number"
               min={1}
-              max={50}
+              max={150}
               value={settings.postsPerFeed}
               onChange={(event) => updateSetting("postsPerFeed", Number(event.target.value))}
             />
@@ -261,7 +261,7 @@ export function Settings({ onRestoreProjects }: SettingsProps) {
             <input
               type="number"
               min={0}
-              max={25}
+              max={100}
               value={settings.maxAiReviewsPerScan}
               onChange={(event) => updateSetting("maxAiReviewsPerScan", Number(event.target.value))}
             />
