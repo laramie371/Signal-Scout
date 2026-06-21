@@ -11,6 +11,7 @@ type ProjectsProps = {
 
 export function Projects({ projects, onAddProject, onDeleteProject }: ProjectsProps) {
   const [leads, setLeads] = useState<Opportunity[]>(() => loadLeads());
+  const [projectFormKey, setProjectFormKey] = useState(0);
 
   const resetDismissed = (projectId: string) => {
     if (!window.confirm("Reset dismissed leads for this project to new?")) return;
@@ -42,6 +43,11 @@ export function Projects({ projects, onAddProject, onDeleteProject }: ProjectsPr
     saveLeads(updated);
     setLeads(updated);
     onDeleteProject(projectId);
+
+    // Force a fresh ProjectForm instance after deletion. The app was occasionally leaving
+    // controlled input fields in a weird temporarily unresponsive state until refresh.
+    // Remounting the form gives the user the same clean state a manual refresh did.
+    setProjectFormKey((key) => key + 1);
   };
 
   return (
@@ -52,7 +58,7 @@ export function Projects({ projects, onAddProject, onDeleteProject }: ProjectsPr
         <p>Each project gets its own RSS feeds, focus keywords, avoid terms, and response style.</p>
       </section>
 
-      <ProjectForm onAdd={onAddProject} />
+      <ProjectForm key={projectFormKey} onAdd={onAddProject} />
 
       <section className="project-list">
         {projects.map((project) => (

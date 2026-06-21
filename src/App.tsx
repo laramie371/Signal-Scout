@@ -21,12 +21,20 @@ function App() {
   };
 
   const addProject = (project: Project) => {
-    updateProjects([project, ...projects]);
+    setProjects((currentProjects) => {
+      const nextProjects = [project, ...currentProjects];
+      saveProjects(nextProjects);
+      return nextProjects;
+    });
   };
 
   const deleteProject = (projectId: string) => {
     saveLeads(loadLeads().filter((lead) => lead.projectId !== projectId));
-    updateProjects(projects.filter((project) => project.id !== projectId));
+    setProjects((currentProjects) => {
+      const nextProjects = currentProjects.filter((project) => project.id !== projectId);
+      saveProjects(nextProjects);
+      return nextProjects;
+    });
   };
 
   return (
