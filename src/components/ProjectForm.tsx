@@ -6,11 +6,7 @@ type ProjectFormProps = {
   onAdd: (project: Project) => void;
 };
 
-const DEFAULT_FEEDS = [
-  "https://www.reddit.com/r/webdev/new.rss",
-  "https://www.reddit.com/r/smallbusiness/new.rss",
-  "https://www.reddit.com/r/SEO/new.rss",
-].join("\n");
+const DEFAULT_FEEDS = "";
 
 export function ProjectForm({ onAdd }: ProjectFormProps) {
   const [name, setName] = useState("");
@@ -58,7 +54,6 @@ export function ProjectForm({ onAdd }: ProjectFormProps) {
 
       const enriched = enrichProjectSuggestion(result.suggestion, { name, description, targetAudience, websiteUrl });
       setKeywords(formatListForTextarea(enriched.keywords));
-      setAvoidKeywords(formatListForTextarea(enriched.avoidKeywords));
       setFeeds(formatListForTextarea(enriched.feeds));
       setResponseStyle(enriched.responseStyle);
       setAiMessage(
@@ -127,26 +122,26 @@ export function ProjectForm({ onAdd }: ProjectFormProps) {
       <div className="two-column-grid">
         <label>
           Target audience <span className="optional-label">optional</span>
-          <input value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder="SVG users, AI trainers, small businesses" />
+          <input value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder="Homeowners, hobbyists, parents, small businesses" />
         </label>
 
         <label>
           Website/Product URL <span className="optional-label">optional</span>
-          <input value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://freeprotool.com" />
+          <input value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://example.com" />
         </label>
       </div>
 
       <label>
         Focus keywords
-        <textarea value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="svg, xlsx viewer, ocr errors" />
+        <textarea value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="cleaning kit, puppy grooming, patio repair" />
         <small>Comma or line separated. These are used to score each feed item.</small>
       </label>
 
       <label>
         RSS feeds to scan
-        <textarea value={feeds} onChange={(event) => setFeeds(event.target.value)} placeholder="https://www.reddit.com/r/webdev/new.rss" />
+        <textarea value={feeds} onChange={(event) => setFeeds(event.target.value)} placeholder="https://www.reddit.com/r/gardening/new.rss" />
         <small>
-          One RSS feed per line or comma separated. Reddit subreddit names like <strong>webdev</strong> are automatically converted to /new.rss feeds.
+          One RSS feed per line or comma separated. Reddit subreddit names like <strong>gardening</strong> are automatically converted to /new.rss feeds.
         </small>
       </label>
 
@@ -176,152 +171,27 @@ type ProjectSuggestionContext = {
 
 type RawProjectSuggestion = {
   keywords: string[];
-  avoidKeywords: string[];
+  avoidKeywords?: string[];
   feeds: string[];
   responseStyle: string;
   reasoning: string;
 };
-
-const BROAD_DISCOVERY_SUBREDDITS = [
-  "webdev",
-  "Frontend",
-  "reactjs",
-  "nextjs",
-  "javascript",
-  "typescript",
-  "programming",
-  "learnprogramming",
-  "codinghelp",
-  "AskProgramming",
-  "softwaredevelopment",
-  "SaaS",
-  "startups",
-  "Entrepreneur",
-  "smallbusiness",
-  "SEO",
-  "marketing",
-  "digital_marketing",
-  "content_marketing",
-  "freelance",
-  "Design",
-  "graphic_design",
-  "web_design",
-  "UserExperienceDesign",
-  "UI_Design",
-  "productivity",
-  "tools",
-  "DataHoarder",
-  "datasets",
-  "dataengineering",
-  "datascience",
-  "MachineLearning",
-  "LocalLLaMA",
-  "ChatGPTCoding",
-  "OpenAI",
-  "ArtificialInteligence",
-  "QualityAssurance",
-  "softwaretesting",
-  "devops",
-  "sysadmin",
-  "APIs",
-  "learnjavascript",
-  "AskTechnology",
-  "NoCode",
-  "sideproject",
-  "indiehackers",
-];
-
-const TOOL_DISCOVERY_SUBREDDITS: Record<string, string[]> = {
-  svg: ["svg", "Inkscape", "AdobeIllustrator", "cricut", "lasercutting", "graphic_design", "web_design"],
-  json: ["javascript", "typescript", "webdev", "api", "APIs", "learnprogramming", "softwaretesting", "devops"],
-  csv: ["excel", "spreadsheets", "dataengineering", "datascience", "datasets", "python", "analytics"],
-  xml: ["webdev", "programming", "sysadmin", "devops", "softwaretesting", "rss", "androiddev"],
-  yaml: ["devops", "kubernetes", "docker", "selfhosted", "homelab", "sysadmin", "ansible"],
-  ocr: ["OCR", "DataHoarder", "Archivists", "Genealogy", "AskTechnology", "productivity", "datasets"],
-  pii: ["cybersecurity", "privacy", "dataengineering", "compliance", "softwaretesting", "datascience"],
-  api: ["APIs", "webdev", "softwaretesting", "devops", "Frontend", "reactjs", "nextjs"],
-  website: ["webdev", "web_design", "SEO", "smallbusiness", "Entrepreneur", "SaaS", "marketing"],
-};
-
-const BROAD_SEARCH_PATTERNS = [
-  "tool",
-  "free tool",
-  "online tool",
-  "browser tool",
-  "no signup",
-  "without uploading",
-  "client side",
-  "formatter",
-  "validator",
-  "viewer",
-  "converter",
-  "generator",
-  "cleanup",
-  "clean up",
-  "corruptor",
-  "test data",
-  "sample data",
-  "debug",
-  "parse",
-  "export",
-  "download",
-  "copy paste",
-  "drag and drop",
-  "bulk",
-  "batch",
-  "alternative",
-  "recommendation",
-  "best way",
-  "how do i",
-  "is there a way",
-  "looking for",
-  "need help with",
-  "problem with",
-  "broken",
-  "error",
-  "issue",
-  "workflow",
-  "automation",
-  "qa testing",
-  "frontend testing",
-  "api testing",
-];
-
-const COMMON_AVOID_TERMS = [
-  "job",
-  "hiring",
-  "internship",
-  "resume",
-  "homework",
-  "assignment",
-  "school project",
-  "torrent",
-  "piracy",
-  "crack",
-  "coupon",
-  "crypto",
-  "politics",
-  "meme",
-  "giveaway",
-  "nsfw",
-];
 
 function enrichProjectSuggestion(suggestion: RawProjectSuggestion, context: ProjectSuggestionContext): RawProjectSuggestion {
   const contextText = [context.name, context.description, context.targetAudience, context.websiteUrl].join(" ").toLowerCase();
   const baseKeywords = uniqueCleanList(suggestion.keywords);
   const seedTerms = extractSeedTerms(contextText, baseKeywords);
   const keywordPool = buildKeywordPool(baseKeywords, seedTerms);
-  const feedPool = buildFeedPool(suggestion.feeds, contextText, seedTerms);
-  const avoidPool = uniqueCleanList([...suggestion.avoidKeywords, ...COMMON_AVOID_TERMS]);
+  const feedPool = uniqueCleanList(suggestion.feeds).filter((feed) => /^https?:\/\//i.test(feed));
 
   return {
-    keywords: keywordPool.slice(0, 80),
-    avoidKeywords: avoidPool.slice(0, 30),
-    feeds: feedPool.slice(0, 60),
+    keywords: keywordPool.slice(0, 150),
+    avoidKeywords: [],
+    feeds: feedPool.slice(0, 80),
     responseStyle: suggestion.responseStyle || "Helpful, transparent, and not salesy.",
     reasoning: suggestion.reasoning
-      ? `${suggestion.reasoning} Expanded locally for wider discovery: ${Math.min(keywordPool.length, 80)} search terms and ${Math.min(feedPool.length, 60)} feeds.`
-      : `Expanded locally for wider discovery: ${Math.min(keywordPool.length, 80)} search terms and ${Math.min(feedPool.length, 60)} feeds.`,
+      ? `${suggestion.reasoning} Expanded locally from this project only: ${Math.min(keywordPool.length, 150)} search terms and ${Math.min(feedPool.length, 80)} feeds.`
+      : `Expanded locally from this project only: ${Math.min(keywordPool.length, 150)} search terms and ${Math.min(feedPool.length, 80)} feeds.`,
   };
 }
 
@@ -329,30 +199,18 @@ function buildKeywordPool(baseKeywords: string[], seedTerms: string[]) {
   const generated: string[] = [];
   for (const term of seedTerms) {
     generated.push(term);
-    for (const pattern of BROAD_SEARCH_PATTERNS) {
-      generated.push(`${term} ${pattern}`);
-    }
+    generated.push(`${term} help`);
+    generated.push(`${term} advice`);
+    generated.push(`${term} recommendation`);
+    generated.push(`best ${term}`);
+    generated.push(`need ${term}`);
+    generated.push(`looking for ${term}`);
+    generated.push(`${term} problem`);
   }
 
   return uniqueCleanList([
     ...baseKeywords,
     ...generated,
-    ...BROAD_SEARCH_PATTERNS,
-  ]);
-}
-
-function buildFeedPool(existingFeeds: string[], contextText: string, seedTerms: string[]) {
-  const subreddits = new Set<string>(BROAD_DISCOVERY_SUBREDDITS);
-
-  for (const [needle, additions] of Object.entries(TOOL_DISCOVERY_SUBREDDITS)) {
-    if (contextText.includes(needle) || seedTerms.some((term) => term.includes(needle))) {
-      additions.forEach((subreddit) => subreddits.add(subreddit));
-    }
-  }
-
-  return uniqueCleanList([
-    ...existingFeeds,
-    ...Array.from(subreddits).map((subreddit) => `https://www.reddit.com/r/${subreddit}/new.rss`),
   ]);
 }
 
@@ -367,7 +225,7 @@ function extractSeedTerms(contextText: string, baseKeywords: string[]) {
   const fromKeywords = baseKeywords
     .flatMap((keyword) => [keyword, ...keyword.split(/\s+/g)])
     .map((word) => word.trim().toLowerCase())
-    .filter((word) => word.length >= 2)
+    .filter((word) => word.length >= 3)
     .filter((word) => !COMMON_CONTEXT_STOP_WORDS.has(word));
 
   return uniqueCleanList([...fromKeywords, ...fromContext]).slice(0, 12);

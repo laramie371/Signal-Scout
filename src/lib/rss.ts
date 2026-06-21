@@ -61,7 +61,8 @@ export async function scanFeedsForProjects(projects: Project[], options: ScanOpt
       if (!isWithinMaxAge(item.pubDate, options.maxFeedAgeDays)) continue;
 
       const scored = scoreItem(item, project, { keywordMatchMode: options.keywordMatchMode });
-      if (scored.score < options.minimumOpportunityScore || scored.matchedKeywords.length === 0) continue;
+      if (scored.matchedKeywords.length === 0) continue;
+      if (scored.avoidedKeywords.length > 0) continue;
 
       const aiReview = await maybeReviewMatchWithAi(item, project, scored, options, aiReviewsUsed);
       if (aiReview) aiReviewsUsed += 1;
@@ -76,7 +77,7 @@ export async function scanFeedsForProjects(projects: Project[], options: ScanOpt
 
   return opportunities
     .sort((a, b) => b.score - a.score || new Date(b.foundAt).getTime() - new Date(a.foundAt).getTime())
-    .slice(0, 250);
+    .slice(0, 1000);
 }
 
 function buildFeeds(project: Project): string[] {
@@ -93,7 +94,7 @@ function buildOpportunity(
   scored: ScoreResult,
   aiReview?: AiMatchReview,
 ): Opportunity {
-  const matched = scored.matchedKeywords.slice(0, 5);
+  const matched = scored.matchedKeywords;
   const sourceName = cleanFeedTitle(item.feedTitle, item.feedUrl);
   const displayScore = aiReview?.isOpportunity ? aiReview.matchStrength : scored.score;
 

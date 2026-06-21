@@ -98,7 +98,7 @@ const parser = new Parser({
 ipcMain.handle("rss:scan", async (_event, args: { feeds?: string[]; limitPerFeed?: number }) => {
   try {
     const feeds = Array.isArray(args.feeds)
-      ? args.feeds.map((feed) => String(feed || "").trim()).filter(Boolean).slice(0, 12)
+      ? args.feeds.map((feed) => String(feed || "").trim()).filter(Boolean).slice(0, 60)
       : [];
     console.log("[Signal Scout] rss:scan payload", { feeds, limitPerFeed: args.limitPerFeed });
 
@@ -107,7 +107,7 @@ ipcMain.handle("rss:scan", async (_event, args: { feeds?: string[]; limitPerFeed
       return { ok: false, error: "No RSS feeds configured for this project." };
     }
 
-    const limitPerFeed = Math.max(1, Math.min(Number(args.limitPerFeed || 25), 50));
+    const limitPerFeed = Math.max(1, Math.min(Number(args.limitPerFeed || 50), 150));
     const items: NormalizedFeedItem[] = [];
     const errors: string[] = [];
 
@@ -175,7 +175,7 @@ ipcMain.handle("openai:suggestProject", async (_event, args: {
   websiteUrl?: string;
 }) => {
   try {
-    const prompt = `Create a Signal Scout project setup for monitoring RSS/community feeds.\n\nProject name: ${args.name || "Untitled"}\nDescription: ${args.description || ""}\nTarget audience: ${args.targetAudience || ""}\nWebsite/product URL: ${args.websiteUrl || ""}\n\nReturn strict JSON with these keys:\n- keywords: 12 to 24 focused search/match keywords, lowercase. Include exact problem phrases users might say.\n- feeds: 5 to 10 RSS feed URLs. Prefer Reddit /new.rss feeds when relevant, e.g. https://www.reddit.com/r/webdev/new.rss. Use real likely subreddit names only.\n- responseStyle: one short sentence describing how replies should sound.\n- reasoning: 2 short sentences explaining the choices.\n\nDo not suggest avoidKeywords. Leave avoid words blank for the user to add manually. Do not include markdown.`;
+    const prompt = `Create a Signal Scout project setup for monitoring RSS/community feeds using ONLY this user's project/business/domain.\n\nProject name: ${args.name || "Untitled"}\nDescription: ${args.description || ""}\nTarget audience: ${args.targetAudience || ""}\nWebsite/product URL: ${args.websiteUrl || ""}\n\nGenerate suggestions only for this user's project/business/domain. Do not assume this app is for software developers, web tools, QA, APIs, SVGs, data tools, or AI training unless the user's project explicitly says so.\n\nReturn strict JSON with these keys:\n- keywords: 80 to 150 search keywords/phrases, lowercase. Include core nouns, plural/singular variants, product terms, customer problem phrases, buying/recommendation phrases, beginner questions, and niche/community language.\n- feeds: 40 to 80 subreddit RSS URLs. Prefer real Reddit /new.rss feeds relevant to the user's project/domain, e.g. https://www.reddit.com/r/example/new.rss.\n- responseStyle: one short sentence describing how replies should sound.\n- reasoning: 2 short sentences explaining why these terms and communities fit this project.\n\nDo not suggest avoidKeywords. Leave avoid words blank for the user to add manually. Do not include markdown.`;
 
     const suggestion = await callOpenAiJson(args.apiKey, args.model, [
       {
@@ -188,9 +188,9 @@ ipcMain.handle("openai:suggestProject", async (_event, args: {
     return {
       ok: true,
       suggestion: {
-        keywords: sanitizeStringArray(suggestion.keywords).slice(0, 30),
+        keywords: sanitizeStringArray(suggestion.keywords).slice(0, 150),
         avoidKeywords: [],
-        feeds: sanitizeStringArray(suggestion.feeds).filter((feed) => /^https?:\/\//i.test(feed)).slice(0, 12),
+        feeds: sanitizeStringArray(suggestion.feeds).filter((feed) => /^https?:\/\//i.test(feed)).slice(0, 80),
         responseStyle: typeof suggestion.responseStyle === "string" && suggestion.responseStyle.trim()
           ? suggestion.responseStyle.trim()
           : "Helpful, transparent, and not salesy.",

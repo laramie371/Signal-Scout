@@ -111,7 +111,7 @@ export function Settings({ onRestoreProjects }: SettingsProps) {
         </div>
 
         <div className="alert info-alert">
-          Add RSS feeds on each project. Reddit feeds like <strong>https://www.reddit.com/r/webdev/new.rss</strong> work immediately,
+          Add RSS feeds on each project. Reddit feeds like <strong>https://www.reddit.com/r/gardening/new.rss</strong> work immediately,
           and any normal RSS or Atom feed can be scanned the same way.
         </div>
       </section>

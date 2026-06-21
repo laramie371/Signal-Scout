@@ -77,7 +77,7 @@ export interface AppSettings {
 
 export interface ProjectSetupSuggestion {
   keywords: string[];
-  avoidKeywords: string[];
+  avoidKeywords?: string[];
   feeds: string[];
   responseStyle: string;
   reasoning: string;

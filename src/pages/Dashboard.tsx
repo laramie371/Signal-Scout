@@ -132,7 +132,6 @@ export function Dashboard({ projects, onOpenProjects }: DashboardProps) {
   };
 
   const visibleOpportunities = opportunities.filter((opportunity) => {
-    if (opportunity.score < settings.minimumOpportunityScore) return false;
     if (filter !== "all") return opportunity.status === filter;
     if (settings.hideDismissed && opportunity.status === "dismissed") return false;
     if (settings.hideResponded && opportunity.status === "responded") return false;
