@@ -6,7 +6,21 @@ Signal Scout is an open-source desktop application that monitors RSS feeds, iden
 
 Built with Electron, React, TypeScript, and SQLite. Runs locally on your machine with optional AI-powered analysis.
 
+## Demo
+
+[![Signal Scout Demo](https://img.youtube.com/vi/TtC2_XnL3u8/maxresdefault.jpg)](https://youtube.com/shorts/TtC2_XnL3u8)
+
+Signal Scout monitors RSS feeds, discovers opportunities, and uses AI to surface the most relevant leads.
+
+### Quick Demo
+
+Watch the 45-second demo here:
+
+https://youtube.com/shorts/TtC2_XnL3u8
+
 ---
+
+
 
 ## Features
 
