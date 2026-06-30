@@ -115,7 +115,7 @@ ipcMain.handle("rss:scan", async (_event, args: { feeds?: string[]; limitPerFeed
       await wait(250);
 
       try {
-        const feed = await parser.parseURL(feedUrl);
+        const feed = await parseFeedWithTimeout(feedUrl);
         const feedTitle = feed.title || shortFeedName(feedUrl);
 
         for (const item of (feed.items || []).slice(0, limitPerFeed)) {
@@ -308,6 +308,9 @@ async function callOpenAiJson(apiKey: string | undefined, model: string | undefi
       response_format: { type: "json_object" },
       messages,
     }),
+    // Without a timeout a stalled connection would hang the scan promise forever,
+    // leaving the UI stuck on "Scanning feeds..." and ignoring further scan clicks.
+    signal: AbortSignal.timeout(30_000),
   });
 
   const text = await response.text();
@@ -435,4 +438,29 @@ function shortFeedName(feedUrl: string) {
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// rss-parser's own `timeout` option does not reliably abort a socket that has been
+// left half-open (common on the 2nd request to a host that keeps the connection alive),
+// which would leave the renderer's scan promise pending forever. Race it against a hard
+// timer so a single dead feed can never hang the whole scan.
+const FEED_TIMEOUT_MS = 20_000;
+
+function parseFeedWithTimeout(feedUrl: string) {
+  return new Promise<Awaited<ReturnType<typeof parser.parseURL>>>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Feed timed out after ${FEED_TIMEOUT_MS / 1000}s`));
+    }, FEED_TIMEOUT_MS);
+
+    parser.parseURL(feedUrl).then(
+      (feed) => {
+        clearTimeout(timer);
+        resolve(feed);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
