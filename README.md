@@ -1,187 +1,170 @@
 # Signal Scout
 
-Signal Scout is an open-source desktop application for discovering opportunities from RSS feeds, scoring them based on relevance and intent, and generating AI-assisted responses when appropriate.
+**Discover opportunities before everyone else does.**
 
-Built with Electron, React, TypeScript, and OpenAI.
+Signal Scout is an open-source desktop application that monitors RSS feeds, identifies relevant opportunities, and helps you quickly determine where to focus your time. Whether you're searching for leads, partnerships, grants, customer requests, research opportunities, or industry discussions, Signal Scout helps surface the signals that matter.
+
+Built with Electron, React, TypeScript, and SQLite. Runs locally on your machine with optional AI-powered analysis.
+
+## Demo
+
+[![Signal Scout Demo](https://img.youtube.com/vi/TtC2_XnL3u8/maxresdefault.jpg)](https://youtube.com/shorts/TtC2_XnL3u8)
+
+Signal Scout monitors RSS feeds, discovers opportunities, and uses AI to surface the most relevant leads.
+
+### Quick Demo
+
+Watch the 45-second demo here:
+
+https://youtube.com/shorts/TtC2_XnL3u8
 
 ---
+
+
 
 ## Features
 
-### RSS Feed Monitoring
-
-Track opportunities from custom RSS feeds without requiring API access.
-
-* Custom feed lists
-* Multi-project support
-* Fast feed scanning
-* Local-first workflow
-
 ### Opportunity Discovery
 
-Signal Scout analyzes incoming feed items and identifies potential opportunities using:
+Turn hundreds of RSS feeds into actionable opportunities.
 
-* Keyword matching
-* Phrase matching
-* Intent detection
-* Avoid-word filtering
-* Opportunity scoring
+- Monitor unlimited RSS feeds
+- Automatic feed polling
+- Duplicate detection
+- Feed categorization
+- Fast local processing
 
-### Intent Detection
+### Smart Matching
 
-Not every keyword match is useful.
+Signal Scout compares incoming content against your projects and goals.
 
-Signal Scout attempts to identify whether a post is:
-
-* Tool Request
-* Recommendation Request
-* Support Question
-* Buying Intent
-* Discussion
-* Showcase
-* Job/Hiring
-* News/Announcement
-
-This helps surface actionable opportunities instead of noise.
+- Keyword matching
+- Intent detection
+- Relevance scoring
+- Match explanations
+- Adjustable thresholds
 
 ### AI Match Review
 
-Optional AI review can be enabled for high-scoring opportunities.
+Optionally use OpenAI to perform a second-pass review.
 
-Rather than sending every post to OpenAI, Signal Scout:
-
-1. Uses local scoring first
-2. Filters low-quality matches
-3. Sends only strong candidates for AI review
-
-This reduces cost while improving relevance.
+- Match quality assessment
+- Opportunity analysis
+- Action recommendations
+- Independent AI signal strength scoring
+- Bulk review mode
 
 ### AI Response Generation
 
-Generate contextual responses based on:
+Generate custom responses using project context and opportunity details.
 
-* Project information
-* Keywords
-* Response style
-* Feed content
-* Opportunity context
+- Project-aware responses
+- Context-aware drafting
+- Custom response styles
+- Copy-ready output
+- No automated posting
 
-Responses are generated on demand and are never posted automatically.
+### Match Management
 
-### Lead Management
+Organize and prioritize opportunities efficiently.
 
-Manage opportunities through a simple workflow:
+- High / Medium / Low filtering
+- AI signal strength sorting
+- Color-coded match indicators
+- Search and filtering
+- Review status tracking
 
-* New
-* Saved
-* Responded
-* Dismissed
+### Project Profiles
 
-Additional features:
+Create multiple projects and track opportunities separately.
 
-* Bulk actions
-* Read tracking
-* Status filtering
-* Project-specific lead management
+Store:
 
-### Import / Export
+- Project descriptions
+- Keywords
+- Goals
+- Services
+- Target audiences
+- Custom context
 
-Backup and restore:
+### Local-First Design
 
-* Projects
-* Leads
-* Settings
+Your data remains on your computer.
 
-using JSON exports.
-
----
-
-## Screenshots
-
-Add screenshots here.
-
-Suggested screenshots:
-
-* Project Setup
-* Opportunity Dashboard
-* AI Response Generation
-* Settings Page
+- No required cloud account
+- SQLite storage
+- Offline functionality
+- Optional OpenAI integration
+- Full user control
 
 ---
 
-## Installation
+## Example Use Cases
 
-Download the latest installer from the Releases section.
+### Freelancers
 
-Install and launch Signal Scout.
+Find potential clients actively requesting services.
 
-No external services are required unless you choose to enable OpenAI features.
+### Agencies
 
----
+Monitor opportunities across multiple industries and locations.
 
-## OpenAI Features
+### Grant Researchers
 
-OpenAI functionality is optional.
+Track funding announcements and application opportunities.
 
-If enabled, Signal Scout can:
+### Startups
 
-* Generate project keywords
-* Review strong opportunities
-* Generate contextual responses
+Discover partnerships, beta testers, customer requests, and community discussions.
 
-Users must provide their own OpenAI API key.
+### Researchers
 
-No API key is bundled with the application.
+Monitor grants, publications, and participation requests.
 
----
+### Content Creators
 
-## Privacy
-
-Signal Scout is designed to be local-first.
-
-* Projects are stored locally
-* Leads are stored locally
-* Settings are stored locally
-
-OpenAI requests are only made when AI features are enabled.
+Identify trending discussions and content opportunities.
 
 ---
 
 ## Tech Stack
 
-* Electron
-* React
-* TypeScript
-* Vite
-* RSS Parser
-* OpenAI SDK
+- Electron
+- React
+- TypeScript
+- SQLite
+- Vite
+- RSS Parsing
+- OpenAI API (Optional)
 
 ---
 
-## Roadmap
+## Privacy
 
-Planned improvements:
+Signal Scout is designed with privacy in mind.
 
-* Additional feed sources
-* Improved intent classification
-* Better scoring models
-* Team workflows
-* Additional export options
-* Analytics and reporting
-* More AI-assisted workflows
+- Data is stored locally.
+- RSS feeds are public sources.
+- OpenAI integration is optional.
+- No social media credentials are required.
+- No automated posting is performed.
 
 ---
 
-## Contributing
+## Installation
 
-Issues, feature requests, and pull requests are welcome.
+### Download Release
 
-If you encounter a bug or have an idea for improvement, please open an issue.
+Download the latest release from the Releases page.
 
----
+### Build From Source
 
-## License
+git clone https://github.com/YOUR_USERNAME/signal-scout.git
 
-MIT License
+cd signal-scout
 
-Use it, modify it, and build on it.
+npm install
+
+npm run build
+
+npm run electron:build
